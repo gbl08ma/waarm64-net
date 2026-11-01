@@ -7,7 +7,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -33,6 +35,14 @@ const testOrigin = "http://page.test"
 var guestMAC = [6]byte{0x52, 0x54, 0x00, 0x12, 0x34, 0x56}
 
 // helperServer serves a helper on loopback; the test's context ends it.
+// destroyStack stops the network's gVisor stack, which VirtualNetwork.Close leaves running and has no way to reach.
+// The race detector's build of an idle stack keeps every core busy in gVisor's sleeper (0 CPU without -race), so stacks
+// left behind by the tests before starve a later test's transfer into its deadline.
+func destroyStack(h *Helper) {
+	f := reflect.ValueOf(h.vn).Elem().FieldByName("stack")
+	(*stack.Stack)(f.UnsafePointer()).Destroy()
+}
+
 func helperServer(t *testing.T, o Options) string {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -41,7 +51,21 @@ func helperServer(t *testing.T, o Options) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(h)
+	var serving sync.WaitGroup
+	t.Cleanup(func() { // last: after the test's connections and the server have closed
+		done := make(chan struct{})
+		go func() { serving.Wait(); close(done) }()
+		select {
+		case <-done:
+			destroyStack(h)
+		case <-time.After(5 * time.Second): // a link still on the switch would deliver into a destroyed stack
+		}
+	})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serving.Add(1)
+		defer serving.Done()
+		h.ServeHTTP(w, r)
+	}))
 	t.Cleanup(srv.Close)
 	return strings.TrimPrefix(srv.URL, "http://")
 }
@@ -241,6 +265,41 @@ func checkICMPv6(t *testing.T, p gopacket.Packet) {
 	if want := header.ICMPv6Checksum(header.ICMPv6ChecksumParams{Header: icmp, Src: ip.SourceAddress(), Dst: ip.DestinationAddress()}); got != want {
 		t.Fatalf("ICMPv6 checksum %#04x, want %#04x", got, want)
 	}
+}
+
+// neighborSolicitation asks, from a guest's link-local address, for the gateway's fe80::1 by unicast or multicast, as
+// Linux checks its router is still there.
+func neighborSolicitation(mac [6]byte) []byte {
+	target := tcpip.AddrFrom16([16]byte{0xfe, 0x80, 15: 1})
+	src := tcpip.AddrFrom16([16]byte{0xfe, 0x80, 8: 0x50, 9: 0x54, 15: 0x56})
+	dst := header.SolicitedNodeAddr(target)
+	f := make([]byte, icmpAt+header.ICMPv6NeighborSolicitMinimumSize+8)
+	header.Ethernet(f).Encode(&header.EthernetFields{SrcAddr: tcpip.LinkAddress(mac[:]), DstAddr: header.EthernetAddressFromMulticastIPv6Address(dst), Type: header.IPv6ProtocolNumber})
+	icmp := header.ICMPv6(f[icmpAt:])
+	header.IPv6(f[ethLen:]).Encode(&header.IPv6Fields{PayloadLength: uint16(len(icmp)), TransportProtocol: header.ICMPv6ProtocolNumber, HopLimit: header.NDPHopLimit, SrcAddr: src, DstAddr: dst})
+	icmp.SetType(header.ICMPv6NeighborSolicit)
+	ns := header.NDPNeighborSolicit(icmp.MessageBody())
+	ns.SetTargetAddress(target)
+	ns.Options().Serialize(header.NDPOptionsSerializer{header.NDPSourceLinkLayerAddressOption(mac[:])})
+	icmp.SetChecksum(header.ICMPv6Checksum(header.ICMPv6ChecksumParams{Header: icmp, Src: src, Dst: dst}))
+	return f
+}
+
+// TestGatewayIsARouter: the gateway's neighbor advertisements say it's a router. Without the flag Linux takes it for
+// a host that stopped routing and drops the default route through it, seconds after the guest's traffic pauses.
+func TestGatewayIsARouter(t *testing.T) {
+	var on atomic.Bool
+	on.Store(true)
+	h := helperServer(t, Options{IPv6: true, Reach6: &Reach6Options{To: []string{resolver(t, &on)}, Network: "udp4", Every: time.Hour}})
+	c := dial(t, h, "/tok", testOrigin, Subprotocol)
+	send(t, c, neighborSolicitation(guestMAC))
+	p := await(t, c, "a neighbor advertisement", func(p gopacket.Packet) bool {
+		return p.Layer(layers.LayerTypeICMPv6NeighborAdvertisement) != nil
+	})
+	if na := p.Layer(layers.LayerTypeICMPv6NeighborAdvertisement).(*layers.ICMPv6NeighborAdvertisement); !na.Router() {
+		t.Fatalf("the gateway's neighbor advertisement doesn't say it's a router: flags %#x", na.Flags)
+	}
+	checkICMPv6(t, p)
 }
 
 // TestNoIPv6: --no-ipv6 answers no router solicitation.

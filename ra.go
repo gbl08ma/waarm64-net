@@ -15,6 +15,15 @@ const (
 	raFixed = header.ICMPv6HeaderSize + header.NDPRAMinimumSize
 )
 
+// gatewayLinkAddress is GatewayMAC as a frame carries it.
+var gatewayLinkAddress = func() tcpip.LinkAddress {
+	a, err := tcpip.ParseMACAddress(GatewayMAC)
+	if err != nil {
+		panic(err)
+	}
+	return a
+}()
+
 // rewriteRA is frame with its router lifetime 0, when frame is a router advertisement (ok); otherwise ok is false. A
 // router advertisement with lifetime 0 keeps the prefix on the link (the guest's address, the gateway's DNS) and takes
 // the default route away, so the guest's IPv6 to the internet fails at once ("network unreachable") and its programs
@@ -33,6 +42,34 @@ func rewriteRA(frame []byte) ([]byte, bool) {
 	out := append([]byte(nil), frame...)
 	icmp := header.ICMPv6(out[icmpAt:])
 	binary.BigEndian.PutUint16(icmp.MessageBody()[2:], 0) // Router Lifetime
+	icmp.SetChecksum(0)
+	icmp.SetChecksum(header.ICMPv6Checksum(header.ICMPv6ChecksumParams{Header: icmp, Src: ip.SourceAddress(), Dst: ip.DestinationAddress()}))
+	return out, true
+}
+
+// markRouter is frame with its Router flag set, when frame is the gateway's neighbor advertisement without it (ok);
+// otherwise ok is false. gVisor sets the flag only on a stack that forwards, and the library's doesn't (it terminates
+// connections). Linux takes an advertisement without it from its router as the router having become a host, and
+// drops the default route through it (ndisc_recv_na), a few seconds after traffic pauses, when it next checks the
+// neighbor. The default then stays gone until the next router advertisement.
+func markRouter(frame []byte) ([]byte, bool) {
+	if len(frame) < icmpAt+header.ICMPv6NeighborAdvertMinimumSize || header.Ethernet(frame).Type() != header.IPv6ProtocolNumber {
+		return nil, false
+	}
+	if header.Ethernet(frame).SourceAddress() != gatewayLinkAddress {
+		return nil, false // another guest on the switch: not a router
+	}
+	ip := header.IPv6(frame[ethLen:])
+	if ip.TransportProtocol() != header.ICMPv6ProtocolNumber || int(ip.PayloadLength()) != len(frame)-icmpAt {
+		return nil, false
+	}
+	icmp := header.ICMPv6(frame[icmpAt:])
+	if icmp.Type() != header.ICMPv6NeighborAdvert || header.NDPNeighborAdvert(icmp.MessageBody()).RouterFlag() {
+		return nil, false
+	}
+	out := append([]byte(nil), frame...)
+	icmp = header.ICMPv6(out[icmpAt:])
+	header.NDPNeighborAdvert(icmp.MessageBody()).SetRouterFlag(true)
 	icmp.SetChecksum(0)
 	icmp.SetChecksum(header.ICMPv6Checksum(header.ICMPv6ChecksumParams{Header: icmp, Src: ip.SourceAddress(), Dst: ip.DestinationAddress()}))
 	return out, true

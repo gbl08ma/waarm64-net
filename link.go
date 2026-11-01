@@ -124,13 +124,15 @@ func (l *link) Read(b []byte) (int, error) {
 }
 
 // Write takes one frame, length first, as the switch writes them; a router advertisement is fixed on the way
-// (rewriteRA). It never blocks on the page.
+// (rewriteRA) and the gateway's neighbor advertisements say it's a router (markRouter). It never blocks on the page.
 func (l *link) Write(b []byte) (int, error) {
 	if l.ctx.Err() != nil {
 		return 0, net.ErrClosed
 	}
-	if len(b) >= 4 && int(binary.BigEndian.Uint32(b)) == len(b)-4 {
-		if l.h.ipv6 && !l.h.reached() {
+	if l.h.ipv6 && len(b) >= 4 && int(binary.BigEndian.Uint32(b)) == len(b)-4 {
+		if f, ok := markRouter(b[4:]); ok {
+			b = append(b[:4:4], f...)
+		} else if !l.h.reached() {
 			if f, ok := rewriteRA(b[4:]); ok {
 				b = append(b[:4:4], f...)
 			}

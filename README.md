@@ -23,7 +23,7 @@ license, in [THIRD_PARTY.md](THIRD_PARTY.md). Ours:
 | `main.go` | flags, the listener (loopback only), the pairing link |
 | `helper.go` | the network's settings; accepts a WebSocket only with the token and from an allowed origin, and closes it with a reason otherwise |
 | `link.go` | moves frames between the WebSocket and the network's switch |
-| `ra.go`, `reach6.go` | IPv6: the guest's default route only while this computer reaches the internet over IPv6 (below) |
+| `ra.go`, `reach6.go` | IPv6: the guest's default route only while this computer reaches the internet over IPv6, and the gateway saying it's a router (below) |
 | `token.go` | the kept token, the version |
 
 **What the guest can reach:** the internet and your LAN, as you (as a VPN's exit node would). Not this computer's own
@@ -77,7 +77,9 @@ the answer changes, the guest hears a new router advertisement at once. (webpc's
 end: its `docs/network-adapters.md` §4 "IPv6 out".)
 
 Upstream's switch answers router solicitations only and its advertisements have a 1000 s lifetime, so the helper
-solicits one on each guest's behalf every 5 minutes, and whenever a guest first appears on a link.
+solicits one on each guest's behalf every 5 minutes, and whenever a guest first appears on a link. Its gateway's neighbor
+advertisements lack the Router flag (its stack doesn't forward), which makes Linux drop the default route a few seconds after
+traffic pauses, so the helper sets the flag on them.
 
 ## Reproducible builds
 
