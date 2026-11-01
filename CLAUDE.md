@@ -7,7 +7,7 @@ loopback and whose gvisor-tap-vsock network puts the guest on the host's sockets
 **Where it lives:** inside webpc's repository (`net/webpc-net/`) during its early development, the user's choice
 (2026-11-01), so page and helper change together. It moves to its own repository, `github.com/gbl08ma/webpc-net`, once
 the bulk is done; keep it movable: everything it needs is in this directory (its own `go.mod`, README, THIRD_PARTY.md,
-this file, `build.sh`), it imports nothing from webpc, and webpc reaches it only by building it (`tests/net-local.test.ts`,
+this file, `LICENSE`, `build.sh`, `licenses.sh`), it imports nothing from webpc, and webpc reaches it only by building it (`tests/net-local.test.ts`,
 `scripts/ci-net.sh`). Releases, the second host's reproducibility check and `go install` wait on the move (and
 `go install` also on IPv6 upstream, below). The plan and its decisions are webpc's `docs/plans/networking-local.md`
 (§1 binds); webpc's CLAUDE.md applies here too, except as below.
@@ -24,8 +24,11 @@ this file, `build.sh`), it imports nothing from webpc, and webpc reaches it only
   bump the pseudo-version (`go mod download -json github.com/evidolob/gvisor-tap-vsock@<sha>`), run the tests, update
   THIRD_PARTY.md. When #745 lands in a release, drop the `replace` and require the release (that also unblocks
   `go install`).
-- **Reproducible:** `./build.sh <version>` builds the six targets with the pinned toolchain; two builds give the same
-  SHA256SUMS. Don't add anything that stamps the build (time, paths, VCS state) or needs cgo.
+- **Reproducible:** `./build.sh <version>` builds the six targets with the pinned toolchain and baseline levels, the
+  release's `LICENSES.txt` (`licenses.sh`) and `INSTALL.md` (the install lines with the hashes); two builds give the same
+  SHA256SUMS on any host (`--check`). Don't add anything that stamps the build (time, paths, VCS state, the host's
+  environment) or needs cgo. The install lines' shape is in `build.sh` and in webpc's `web/local-release.ts`: change
+  both together.
 - **Security:** listen on loopback only; a WebSocket only with the token (constant-time compare) and from an allowed
   origin, exact match; nothing about the traffic in the logs; no guest-reachable API.
 - **IPv6 out:** the guest's IPv6 default route only while the host reaches the internet over IPv6 (README "IPv6"); keep
@@ -35,7 +38,7 @@ this file, `build.sh`), it imports nothing from webpc, and webpc reaches it only
 
 ```sh
 go vet ./... && go test -race ./...      # ~10 s: a netstack guest over a real WebSocket
-./build.sh v0.0.0-test /tmp/b1           # the release binaries (twice, then diff the SHA256SUMS)
+./build.sh v0.0.0-test /tmp/b1           # the release (~2 min for the six); `./build.sh --check /tmp/b1/SHA256SUMS v0.0.0-test` rebuilds and compares
 go run . --origin http://127.0.0.1:8080  # beside webpc's `npm run serve`; open the printed link's ws:// as ?localnet=
 ```
 

@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -48,10 +49,24 @@ func main() {
 		version      = flag.Bool("version", false, "print the version and exit")
 	)
 	flag.Var(&allowed, "origin", "a page origin to accept besides "+DefaultOrigin+" (repeatable; e.g. http://localhost:8080)")
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "%s: a fast network for webpc's virtual machines, on this computer's own sockets.\n"+
+			"It prints a link; open it in the browser to pair the page. README.md: https://github.com/gbl08ma/webpc-net\n\n"+
+			"Usage: webpc-net [flags]\n", Version())
+		flag.PrintDefaults()
+	}
 	flag.Parse()
+	if flag.NArg() > 0 {
+		fmt.Fprintf(os.Stderr, "webpc-net takes no arguments, only flags (%q)\n", flag.Args())
+		os.Exit(2)
+	}
 	if *version {
 		fmt.Println(Version())
 		return
+	}
+	if err := checkMTU(*mtu, !*noIPv6); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
 	}
 	if err := run(*listen, append(origins{DefaultOrigin}, allowed...), *newToken, Options{HostLoopback: *hostLoopback, IPv6: !*noIPv6, MTU: *mtu}); err != nil {
 		log.Fatal(err)
@@ -71,7 +86,9 @@ func run(listen string, allowed []string, newToken bool, o Options) error {
 		return err
 	}
 	ln, err := net.Listen("tcp", listen)
-	if err != nil {
+	if errno := syscall.Errno(0); errors.Is(err, syscall.EADDRINUSE) || (errors.As(err, &errno) && errno == wsaeaddrinuse) {
+		return fmt.Errorf("%s is taken: is another webpc-net running? (--listen 127.0.0.1:<port> picks another port)", listen)
+	} else if err != nil {
 		return err
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -94,6 +111,25 @@ func run(listen string, allowed []string, newToken bool, o Options) error {
 	}()
 	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
+	}
+	return nil
+}
+
+// wsaeaddrinuse is Windows' "address in use" (syscall.EADDRINUSE is Unix's there).
+const wsaeaddrinuse = 10048
+
+// MaxMTU is the largest MTU a link can have: the largest the page takes and was measured with (webpc's
+// docs/plans/networking-local.md §3 "The MTU").
+const MaxMTU = 65520
+
+// checkMTU refuses an MTU the guest or the page couldn't use: IPv6 needs 1280, IPv4's DHCP 576.
+func checkMTU(mtu int, ipv6 bool) error {
+	low := 576
+	if ipv6 {
+		low = 1280
+	}
+	if mtu < low || mtu > MaxMTU {
+		return fmt.Errorf("--mtu %d: between %d and %d (1280 is IPv6's least; --no-ipv6 allows 576)", mtu, low, MaxMTU)
 	}
 	return nil
 }

@@ -1,7 +1,6 @@
 # Third-party code in webpc-net
 
-webpc-net's own code is MIT (the repository's [LICENSE](../../LICENSE) while it lives inside webpc; its own when it
-moves to `github.com/gbl08ma/webpc-net`). Nothing in this directory is copied from another project: the files are
+webpc-net's own code is MIT ([LICENSE](LICENSE), webpc's, copied here so the directory moves whole). Nothing in this directory is copied from another project: the files are
 ours, written against the libraries below. Checked 2026-11-01 from the module cache (each module's own `LICENSE`
 file), for the modules a build for any of the six targets links (`go list -deps` with `GOOS` linux, darwin and
 windows; `go version -m` on a binary lists them too).
@@ -29,8 +28,10 @@ windows; `go version -m` on a binary lists them too).
 | Go's standard library and runtime | the toolchain `go.mod` pins (go1.27.3) | BSD-3-Clause | |
 
 All are permissive. None of the Apache-2.0 modules has a `NOTICE` file. A binary release carries these licenses'
-texts beside the binaries (BSD, MIT, ISC and Apache-2.0 all ask for that in a binary distribution): L1 writes that
-file (as webpc's `npm run dist` writes `EDK2-LICENSES.txt`).
+texts beside the binaries (BSD, MIT, ISC and Apache-2.0 all ask for that in a binary distribution): `LICENSES.txt`,
+which `licenses.sh` writes for `build.sh` from the same `go list -deps` and each module's own `LICENSE*`, `COPYING*`,
+`NOTICE*` and `PATENTS` files (golang.org/x's and Go's have a `PATENTS` grant), Go's own first. It fails when a linked
+module has none, so a new dependency can't slip into a release without its text.
 
 **The fork:** `replace` points the module path `github.com/containers/gvisor-tap-vsock` at evidolob's fork, at one
 commit; its code and license are upstream's (Apache-2.0, © the gvisor-tap-vsock authors), with #745's changes. When
