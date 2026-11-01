@@ -1,0 +1,38 @@
+module github.com/gbl08ma/webpc-net
+
+go 1.27
+
+toolchain go1.27.3
+
+require (
+	github.com/coder/websocket v1.8.15
+	github.com/containers/gvisor-tap-vsock v0.9.0
+	github.com/google/gopacket v1.1.19
+	github.com/insomniacslk/dhcp v0.0.0-20240710054256-ddd8a41251c9
+	gvisor.dev/gvisor v0.0.0-20260413194555-9680d69bf798
+)
+
+require (
+	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/google/btree v1.1.2 // indirect
+	github.com/inetaf/tcpproxy v0.0.0-20260515195445-c159a6051109 // indirect
+	github.com/linuxkit/virtsock v0.0.0-20220523201153-1a23e78aa7a2 // indirect
+	github.com/mdlayher/socket v0.6.0 // indirect
+	github.com/mdlayher/vsock v1.3.0 // indirect
+	github.com/miekg/dns v1.1.73 // indirect
+	github.com/pierrec/lz4/v4 v4.1.14 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
+	github.com/sirupsen/logrus v1.10.2 // indirect
+	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa // indirect
+	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/time v0.12.0 // indirect
+)
+
+// IPv6 (README "IPv6"): the network of containers/gvisor-tap-vsock#745, unmerged. Its branch (evidolob's
+// guillaumerose-ipv62-fixes) is force-pushed, so this names one commit; the module proxy keeps it once fetched.
+// Remove this line when the pull request lands in a release, and require that release instead.
+replace github.com/containers/gvisor-tap-vsock => github.com/evidolob/gvisor-tap-vsock v0.0.0-20261021084248-7fea9a947613
