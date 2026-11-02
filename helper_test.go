@@ -165,8 +165,9 @@ func await(t *testing.T, c *websocket.Conn, what string, ok func(gopacket.Packet
 	}
 }
 
-func TestDHCP(t *testing.T) {
-	c := dial(t, helperServer(t, Options{}), "/tok", testOrigin, Subprotocol)
+// discovery is a guest's DHCP discover, as a frame.
+func discovery(t *testing.T) []byte {
+	t.Helper()
 	d, err := dhcpv4.NewDiscovery(net.HardwareAddr(guestMAC[:]))
 	if err != nil {
 		t.Fatal(err)
@@ -179,7 +180,39 @@ func TestDHCP(t *testing.T) {
 		&layers.Ethernet{SrcMAC: guestMAC[:], DstMAC: layers.EthernetBroadcast, EthernetType: layers.EthernetTypeIPv4}, ip, udp, gopacket.Payload(d.ToBytes())); err != nil {
 		t.Fatal(err)
 	}
-	send(t, c, buf.Bytes())
+	return buf.Bytes()
+}
+
+// TestMessageAtTheLimit: a message of exactly MaxMessage bytes, of the largest frames a page sends (web/local-net.ts
+// batches up to it), leaves the link up. Past the limit the WebSocket closes, and the guest's link goes with it.
+func TestMessageAtTheLimit(t *testing.T) {
+	c := dial(t, helperServer(t, Options{}), "/tok", testOrigin, Subprotocol)
+	const largest = 65553 // the page's MAX_PORT_FRAME
+	frame := func(n int) []byte {
+		f := make([]byte, n)
+		copy(f, []byte{0x52, 0x54, 0x00, 0x99, 0x99, 0x99}) // to a MAC not on the switch: it goes nowhere
+		copy(f[6:], guestMAC[:])
+		return f
+	}
+	var frames [][]byte
+	left := MaxMessage
+	for left >= 4+largest {
+		frames = append(frames, frame(largest))
+		left -= 4 + largest
+	}
+	frames = append(frames, frame(left-4))
+	send(t, c, frames...)
+	send(t, c, discovery(t))
+	await(t, c, "a DHCP offer after the message", func(p gopacket.Packet) bool {
+		u, _ := p.Layer(layers.LayerTypeUDP).(*layers.UDP)
+		return u != nil && u.DstPort == 68
+	})
+}
+
+func TestDHCP(t *testing.T) {
+	c := dial(t, helperServer(t, Options{}), "/tok", testOrigin, Subprotocol)
+	var err error
+	send(t, c, discovery(t))
 	var offer *dhcpv4.DHCPv4
 	await(t, c, "a DHCP offer", func(p gopacket.Packet) bool {
 		u, _ := p.Layer(layers.LayerTypeUDP).(*layers.UDP)

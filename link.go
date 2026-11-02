@@ -32,7 +32,8 @@ type link struct {
 	macs  map[[6]byte]struct{} // the guests' MACs on this link (for router solicitations on their behalf)
 }
 
-// MaxMessage bounds a message from the page; MaxQueued bounds what waits for the page (frames past it are dropped, as
+// MaxMessage bounds a message from the page, whose batches stop at it (web/local-net.ts `LOCAL_MAX_MESSAGE`; past it the
+// WebSocket closes, and the guest's link with it); MaxQueued bounds what waits for the page (frames past it are dropped, as
 // a full NIC queue drops them, rather than stalling the switch, which writes to every link under one lock).
 const (
 	MaxMessage = 1 << 20
