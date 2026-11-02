@@ -39,7 +39,7 @@ this file, `LICENSE`, `build.sh`, `licenses.sh`), it imports nothing from webpc,
 ```sh
 go vet ./... && go test -race ./...      # ~10 s: a netstack guest over a real WebSocket
 ./build.sh v0.0.0-test /tmp/b1           # the release (~2 min for the six); `./build.sh --check /tmp/b1/SHA256SUMS v0.0.0-test` rebuilds and compares
-go run . --origin http://127.0.0.1:8080  # beside webpc's `npm run serve`; open the printed link's ws:// as ?localnet=
+go run . --origin http://127.0.0.1:8080  # beside webpc's `npm run serve`; open the printed link (the Network wizard's This computer)
 ```
 
 From webpc's root: `scripts/ci-net.sh` runs `tests/net-local.test.ts` (Debian on the page through the helper). The
