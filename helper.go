@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/coder/websocket"
 	"github.com/containers/gvisor-tap-vsock/pkg/types"
@@ -119,15 +120,25 @@ func (h *Helper) readvertise() {
 
 func (h *Helper) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
-	// The handshake completes before a refusal, so the page can tell the user why (a browser sees no HTTP status).
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{Subprotocol}, InsecureSkipVerify: true})
+	// The handshake completes before a refusal, so the page can tell the user why (a browser sees no HTTP status). A
+	// browser fails the handshake unless the answer names a protocol it offered, so another version's is answered too
+	// and then refused with CloseVersion.
+	protos := []string{Subprotocol}
+	for _, h := range r.Header.Values("Sec-WebSocket-Protocol") {
+		for _, p := range strings.Split(h, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				protos = append(protos, p)
+			}
+		}
+	}
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: protos, InsecureSkipVerify: true})
 	if err != nil {
 		return // Accept answered the request
 	}
 	switch {
 	case !h.originAllowed(origin):
 		log.Printf("refused %s: origin %q isn't accepted (--origin adds one)", r.RemoteAddr, origin)
-		_ = c.Close(CloseOrigin, "origin not accepted: run the helper with --origin "+origin)
+		_ = c.Close(CloseOrigin, closeReason("origin not accepted: run the helper with --origin "+origin))
 	case subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(r.URL.Path, "/")), []byte(h.token)) != 1:
 		log.Printf("refused %s from %s: wrong token", r.RemoteAddr, origin)
 		_ = c.Close(CloseToken, "wrong token: pair again with the link the helper prints")
@@ -137,6 +148,20 @@ func (h *Helper) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		h.serve(r.Context(), c, origin)
 	}
+}
+
+// closeReason cuts a close frame's reason to the 123 bytes it may hold (past them no close frame is sent at all, and
+// the page would see 1006 instead of the code), at a character's boundary.
+func closeReason(s string) string {
+	const max = 123
+	if len(s) <= max {
+		return s
+	}
+	s = s[:max]
+	for !utf8.ValidString(s) {
+		s = s[:len(s)-1]
+	}
+	return s
 }
 
 func (h *Helper) serve(ctx context.Context, c *websocket.Conn, origin string) {

@@ -50,7 +50,7 @@ jobs:
           diff -r out/dist-ubuntu-24.04 out/dist-ubuntu-24.04-arm
           cd out/dist-ubuntu-24.04 && sha256sum -c SHA256SUMS && cat SHA256SUMS
       - name: Publish
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         working-directory: out/dist-ubuntu-24.04
         env:
           GH_TOKEN: ${{ github.token }}

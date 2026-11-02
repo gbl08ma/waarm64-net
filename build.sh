@@ -72,6 +72,11 @@ case $out in /*) ;; *) out=$(pwd)/$out ;; esac
 cd "$(dirname "$0")"
 toolchain=$(sed -n 's/^toolchain //p' go.mod)
 export GOTOOLCHAIN=$toolchain CGO_ENABLED=0 GOFLAGS= GOEXPERIMENT= GOAMD64=v1 GOARM64=v8.0
+# A fresh output directory; an existing one only if it's empty or an earlier build's (never someone's directory).
+if [ -e "$out" ] && [ -n "$(ls -A "$out")" ] && [ ! -f "$out/SHA256SUMS" ]; then
+  echo "build.sh: $out isn't empty and isn't an earlier build's (no SHA256SUMS): name another directory" >&2
+  exit 1
+fi
 rm -rf "$out"
 mkdir -p "$out"
 for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do

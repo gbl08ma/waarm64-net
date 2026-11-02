@@ -1,6 +1,6 @@
 #!/bin/sh
 # LICENSES.txt, the release's: the license texts of the helper and of everything a build for any of the six targets
-# links (Go's standard library and runtime, and each module `go list -deps` names for linux, darwin and windows), each
+# links (Go's standard library and runtime, and each module `go list -deps` names for linux, darwin and windows on amd64 and arm64), each
 # module's own files from the module cache, which go.sum checks. BSD, MIT, ISC and Apache-2.0 ask for their texts beside
 # a binary. Deterministic: the same go.mod and go.sum give the same file on any host (build.sh hashes it).
 #   ./licenses.sh [version] > LICENSES.txt
@@ -32,9 +32,9 @@ EOF
 # shellcheck disable=SC2046 # the files' names have no spaces
 section "webpc-net (github.com/gbl08ma/webpc-net)" . LICENSE
 section "Go's standard library and runtime ($(go env GOVERSION))" "$goroot" $(licenseFiles "$goroot")
-for os in linux darwin windows; do
-  GOOS=$os go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}}{{with .Replace}} {{.Path}} {{.Version}}{{end}}{{end}}{{end}}' .
-done | sort -u | while read -r path ver rpath rver; do
+for os in linux darwin windows; do for arch in amd64 arm64; do
+  GOOS=$os GOARCH=$arch go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}}{{with .Replace}} {{.Path}} {{.Version}}{{end}}{{end}}{{end}}' .
+done; done | sort -u | while read -r path ver rpath rver; do
   if [ -n "${rpath-}" ]; then
     dir=$(go list -m -f '{{.Replace.Dir}}' "$path")
     title="$path (from $rpath $rver)"

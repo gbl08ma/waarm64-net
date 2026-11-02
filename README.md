@@ -10,7 +10,7 @@ internet only through a relay (tailcat, Tailscale's DERP), because pages have no
 
 ## What you're trusting
 
-**About 650 lines of ours** (`*.go` here, tests, comments and blank lines aside), on **Podman's network stack**: the network itself (a
+**About 770 lines of ours** (`*.go` here, tests, comments and blank lines aside), on **Podman's network stack**: the network itself (a
 switch, DHCP, DHCPv6, DNS, router advertisements, and the forwarders that turn the guest's TCP, UDP and ICMP into
 this computer's connections) is [gvisor-tap-vsock](https://github.com/containers/gvisor-tap-vsock), the library
 behind Podman machine on macOS, Windows and Linux, Lima and CRC, on [gVisor](https://gvisor.dev)'s TCP/IP stack.
@@ -26,7 +26,8 @@ license, in [THIRD_PARTY.md](THIRD_PARTY.md). Ours:
 | `token.go` | the kept token, the version |
 
 **What the guest can reach:** the internet and your LAN, as you (as a VPN's exit node would). Not this computer's own
-loopback services, unless you pass `--host-loopback`. There is no API for the guest: gvisor-tap-vsock's
+loopback services, unless you pass `--host-loopback` (the helper drops the guest's packets to `0.0.0.0`, `127.0.0.0/8`,
+`::`, `::1` and IPv4-mapped IPv6 addresses, which this computer's sockets would take as its own loopback). There is no API for the guest: gvisor-tap-vsock's
 port-forwarding endpoints aren't served.
 
 **Who can use it:** only a page that has your link (its token, 256 random bits, kept in your config directory so

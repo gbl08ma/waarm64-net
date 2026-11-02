@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -93,6 +94,8 @@ func TestRefusals(t *testing.T) {
 		{"origin", "/tok", "https://evil.test", []string{Subprotocol}, CloseOrigin},
 		{"no origin", "/tok", "", []string{Subprotocol}, CloseOrigin},
 		{"origin's scheme", "/tok", "http://vm.tny.im", []string{Subprotocol}, CloseOrigin},
+		// Past a close frame's 123 bytes of reason, the code would be lost (a 1006 to a browser).
+		{"long origin", "/tok", "https://" + strings.Repeat("a", 100) + ".test", []string{Subprotocol}, CloseOrigin},
 		{"token", "/tak", testOrigin, []string{Subprotocol}, CloseToken},
 		{"no token", "/", testOrigin, []string{Subprotocol}, CloseToken},
 		{"version", "/tok", testOrigin, []string{"webpc-net.v0"}, CloseVersion},
@@ -100,6 +103,10 @@ func TestRefusals(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := dial(t, host, tc.path, tc.origin, tc.protos...)
+			// A browser fails the handshake (1006, no close code) unless the answer names a protocol it offered.
+			if len(tc.protos) > 0 && !slices.Contains(tc.protos, c.Subprotocol()) {
+				t.Fatalf("answered subprotocol %q to an offer of %q: a browser fails the handshake", c.Subprotocol(), tc.protos)
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			_, _, err := c.Read(ctx)
@@ -471,4 +478,86 @@ func TestRewriteRA(t *testing.T) {
 		t.Fatal("the solicitation doesn't parse")
 	}
 	checkICMPv6(t, p)
+}
+
+// udpFrame is a UDP datagram from the guest (192.168.127.2) to dst:port, sent to the gateway's MAC.
+func udpFrame(t *testing.T, dst net.IP, port int, payload []byte) []byte {
+	t.Helper()
+	gw, _ := net.ParseMAC(GatewayMAC)
+	udp := &layers.UDP{SrcPort: 40000, DstPort: layers.UDPPort(port)}
+	eth := &layers.Ethernet{SrcMAC: guestMAC[:], DstMAC: gw, EthernetType: layers.EthernetTypeIPv4}
+	var ip gopacket.SerializableLayer
+	if v4 := dst.To4(); v4 != nil && !strings.Contains(dst.String(), ":") {
+		l := &layers.IPv4{Version: 4, TTL: 64, Protocol: layers.IPProtocolUDP, SrcIP: net.IPv4(192, 168, 127, 2).To4(), DstIP: v4}
+		_ = udp.SetNetworkLayerForChecksum(l)
+		ip = l
+	} else {
+		l := &layers.IPv6{Version: 6, HopLimit: 64, NextHeader: layers.IPProtocolUDP, SrcIP: net.ParseIP("fd77:6562:7063::2"), DstIP: dst.To16()}
+		_ = udp.SetNetworkLayerForChecksum(l)
+		eth.EthernetType = layers.EthernetTypeIPv6
+		ip = l
+	}
+	buf := gopacket.NewSerializeBuffer()
+	if err := gopacket.SerializeLayers(buf, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, eth, ip, udp, gopacket.Payload(payload)); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// TestNoHostLoopbackUDP: without --host-loopback the guest's UDP can't reach this computer's loopback by any address
+// (0.0.0.0 reaches it on Linux and macOS when dialed); with it, the host's address on the network does (the frames
+// themselves are good).
+func TestNoHostLoopbackUDP(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		o        Options
+		dst      net.IP
+		delivers bool
+	}{
+		{"0.0.0.0", Options{}, net.IPv4zero, false},
+		{"127.0.0.1", Options{}, net.IPv4(127, 0, 0, 1), false},
+		{"the host's address", Options{}, net.ParseIP(HostIP), false},
+		{"0.1.2.3", Options{}, net.IPv4(0, 1, 2, 3), false},
+		{"::", Options{IPv6: true}, net.IPv6unspecified, false},
+		{"::1", Options{IPv6: true}, net.IPv6loopback, false},
+		{"::ffff:127.0.0.1", Options{IPv6: true}, net.ParseIP("::ffff:127.0.0.1"), false},
+		{"::ffff:0.0.0.0", Options{IPv6: true}, net.ParseIP("::ffff:0.0.0.0"), false},
+		{"the host's address with --host-loopback", Options{HostLoopback: true}, net.ParseIP(HostIP), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// ::1 for the IPv6 destinations that dial IPv6's loopback (where the host has it), else 127.0.0.1.
+			network, local := "udp4", "127.0.0.1:0"
+			if tc.dst.Equal(net.IPv6unspecified) || tc.dst.Equal(net.IPv6loopback) {
+				network, local = "udp6", "[::1]:0"
+			}
+			pc, err := net.ListenPacket(network, local)
+			if err != nil {
+				t.Skipf("no %s here: %v", local, err)
+			}
+			defer pc.Close()
+			c := dial(t, helperServer(t, tc.o), "/tok", testOrigin, Subprotocol)
+			port := pc.LocalAddr().(*net.UDPAddr).Port
+			got := make(chan struct{}, 1)
+			go func() {
+				b := make([]byte, 64)
+				if _, _, err := pc.ReadFrom(b); err == nil {
+					got <- struct{}{}
+				}
+			}()
+			for range 5 {
+				send(t, c, udpFrame(t, tc.dst, port, []byte("from the guest")))
+				time.Sleep(50 * time.Millisecond)
+			}
+			select {
+			case <-got:
+				if !tc.delivers {
+					t.Fatalf("a datagram to %v reached this computer's loopback", tc.dst)
+				}
+			case <-time.After(time.Second):
+				if tc.delivers {
+					t.Fatal("nothing arrived")
+				}
+			}
+		})
+	}
 }

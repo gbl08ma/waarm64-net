@@ -72,6 +72,9 @@ func (l *link) reader() {
 			_ = l.c.Close(websocket.StatusProtocolError, err.Error())
 			return
 		}
+		if msg = dropToHost(msg); len(msg) == 0 {
+			continue
+		}
 		select {
 		case l.in <- msg:
 		case <-l.ctx.Done():
@@ -108,6 +111,43 @@ func (l *link) learn(msg []byte) (fresh bool, err error) {
 		msg = msg[4+n:]
 	}
 	return fresh, nil
+}
+
+// dropToHost is msg (whole frames) without the guest's packets to an address that would reach this computer's own
+// loopback when the network's forwarders dial it: 0.0.0.0/8, 127.0.0.0/8, ::, ::1, and IPv4-mapped IPv6 addresses
+// (::ffff:0.0.0.0 dials 0.0.0.0). gVisor drops some of these, not all (UDP to 0.0.0.0 reached a host's 127.0.0.1).
+// --host-loopback's way to this computer is the host's address on the network, which isn't one of these.
+func dropToHost(msg []byte) []byte {
+	var out []byte
+	for at := 0; at < len(msg); {
+		n := int(binary.BigEndian.Uint32(msg[at:]))
+		if f := msg[at+4 : at+4+n]; !toHost(f) {
+			if out == nil && at == 0 && at+4+n == len(msg) {
+				return msg // the usual case: nothing dropped from a message of one frame
+			}
+			out = append(out, msg[at:at+4+n]...)
+		}
+		at += 4 + n
+	}
+	return out
+}
+
+// toHost: an Ethernet frame whose IPv4 or IPv6 destination is one of dropToHost's.
+func toHost(f []byte) bool {
+	switch binary.BigEndian.Uint16(f[12:]) {
+	case 0x0800:
+		if len(f) < 14+20 {
+			return false
+		}
+		return f[14+16] == 0 || f[14+16] == 127
+	case 0x86dd:
+		if len(f) < 14+40 {
+			return false
+		}
+		dst := net.IP(f[14+24 : 14+40])
+		return dst.IsUnspecified() || dst.IsLoopback() || dst.To4() != nil
+	}
+	return false
 }
 
 func (l *link) Read(b []byte) (int, error) {
