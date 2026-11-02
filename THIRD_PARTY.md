@@ -1,6 +1,6 @@
 # Third-party code in webpc-net
 
-webpc-net's own code is MIT ([LICENSE](LICENSE), webpc's, copied here so the directory moves whole). Nothing in this directory is copied from another project: the files are
+webpc-net's own code is MIT ([LICENSE](LICENSE)). Nothing in this repository is copied from another project: the files are
 ours, written against the libraries below. Checked 2026-11-01 from the module cache (each module's own `LICENSE`
 file), for the modules a build for any of the six targets links (`go list -deps` with `GOOS` linux, darwin and
 windows; `go version -m` on a binary lists them too).

@@ -1,0 +1,27 @@
+# go vet and the tests (README "Developing"), on one Linux runner. The repository is private for now and its runner
+# minutes are billed: only changes that can break them run it (CLAUDE.md "GitHub Actions").
+name: ci
+on:
+  push:
+    branches: [main]
+    paths: ['**.go', go.mod, go.sum, '*.sh', .github/workflows/ci.yml]
+  pull_request:
+    paths: ['**.go', go.mod, go.sum, '*.sh', .github/workflows/ci.yml]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...

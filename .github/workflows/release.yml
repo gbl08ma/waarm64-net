@@ -1,0 +1,58 @@
+# The release (README "Reproducible builds"): build.sh on an x86_64 and an arm64 Linux runner, and, on a v* tag, a
+# release published only when the two builds are byte for byte the same, with INSTALL.md as its notes. Run by hand
+# (workflow_dispatch) it builds and compares without releasing. Separate from webpc's deploy: webpc's page offers a
+# release once its web/local-release.ts takes the release's SHA256SUMS.
+name: release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+jobs:
+  build:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: ./build.sh "$VERSION" dist
+        env:
+          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('v0.0.0-{0}', github.sha) }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist-${{ matrix.runner }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: dist-*
+          path: out
+      - name: The two builds are the same
+        run: |
+          diff -r out/dist-ubuntu-24.04 out/dist-ubuntu-24.04-arm
+          cd out/dist-ubuntu-24.04 && sha256sum -c SHA256SUMS && cat SHA256SUMS
+      - name: Publish
+        if: github.ref_type == 'tag'
+        working-directory: out/dist-ubuntu-24.04
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "webpc-net $TAG" --notes-file INSTALL.md webpc-net-* LICENSES.txt SHA256SUMS

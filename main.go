@@ -101,9 +101,6 @@ func run(listen string, allowed []string, newToken bool, o Options) error {
 	ws := "ws://" + net.JoinHostPort(host, port) + "/" + token
 	log.Printf("%s listening on %s (IPv6 %s); pages accepted from %s", Version(), ln.Addr(), onOff(o.IPv6), strings.Join(allowed, ", "))
 	fmt.Printf("\nPair the page with this link:\n\n    %s/#net=%s\n\n", allowed[0], ws)
-	for _, a := range allowed[1:] {
-		fmt.Printf("or, on %s:\n\n    %s/#net=%s\n\n", a, a, ws)
-	}
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		<-ctx.Done()

@@ -5,9 +5,8 @@ the page in your browser connects to it over a WebSocket on `127.0.0.1`, and the
 this computer's own sockets, at loopback's latency and your own uplink's speed. Without it, a browser can reach the
 internet only through a relay (tailcat, Tailscale's DERP), because pages have no UDP.
 
-> **Status: in development** (webpc's `docs/plans/networking-local.md`). It lives in webpc's repository for now and
-> moves to `github.com/gbl08ma/webpc-net`, its module path already, once the bulk of it is done. No release yet. Every
-> name (the program's, the subprotocol, the port) is provisional.
+> **Status: early** (v0.1.0; webpc's `docs/plans/networking-local.md` is the plan). Every name (the program's, the
+> subprotocol, the port) is provisional.
 
 ## What you're trusting
 
@@ -37,8 +36,8 @@ visit could use it as a way into your LAN.
 
 ## Install
 
-**No release yet:** the lines below are their shape, and each release's are in its notes (`INSTALL.md`, which
-`build.sh` writes with that release's hashes), here and on the page. Each downloads one binary to `~/.local/bin`
+Each [release](https://github.com/gbl08ma/webpc-net/releases)'s notes have these lines with its hashes filled in
+(`INSTALL.md`, which `build.sh` writes), and webpc's page shows them for your platform. Each downloads one binary to `~/.local/bin`
 (`%LOCALAPPDATA%\Programs\webpc-net` on Windows), checks it against the published SHA-256, marks it executable and
 runs it. Nothing installs itself, asks for administrator rights or starts at login: you run it when you want the
 network. On Linux, x86_64 (`linux-arm64`, `darwin-amd64` and `darwin-arm64` are the same lines, `shasum -a 256 -c`
@@ -74,7 +73,7 @@ webpc-net                                  # prints the link to open
 webpc-net --origin http://localhost:8080   # also accept webpc's dev server (npm run serve)
 ```
 
-From a checkout of webpc, `go run .` in `net/webpc-net` instead. It prints a link like
+From a checkout of this repository, `go run .` instead. It prints a link like
 `https://vm.tny.im/#net=ws://127.0.0.1:8740/<token>`: open it, and the page offers to add the helper as a connection
 (its Network wizard, "This computer") for a machine's network adapter. Chromium asks once whether the page may reach
 devices on your local network: allow it (if you refused, the page says where to change it). The link stays the same
@@ -83,7 +82,7 @@ across restarts (the token is kept), so a page paired once reconnects whenever t
 | Flag | |
 |---|---|
 | `--listen 127.0.0.1:<port>` | where to listen (default `127.0.0.1:8740`; a loopback address only: `[::1]:<port>` too) |
-| `--origin <origin>` | a page origin to accept besides `https://vm.tny.im`, exactly (repeatable): a copy of webpc you serve yourself, or its dev server |
+| `--origin <origin>` | a page origin to accept besides `https://vm.tny.im`, exactly (repeatable): a copy of webpc you serve yourself, or its dev server (the printed link still names `https://vm.tny.im`: put that origin in its place) |
 | `--new-token` | a new token: pages paired before must pair again |
 | `--host-loopback` | the guest reaches this computer's own `127.0.0.1` at `192.168.127.254` (off: only the internet and the LAN) |
 | `--no-ipv6` | IPv4 only |
@@ -129,9 +128,12 @@ traffic pauses, so the helper sets the flag on them.
 the toolchain `go.mod` pins (Go downloads it, checked against its checksum database): the same version from the same
 source gives the same bytes on any host. `LICENSES.txt` is the licenses of everything linked in, in full, from the
 module cache (`licenses.sh`); SHA256SUMS covers it too. To check a release yourself: check out its tag, run
-`./build.sh --check` with the release's SHA256SUMS, and compare those with the hashes the README and the page publish.
-Checked so far: two clean builds on one host (2026-11-01, x86_64 Linux: webpc's
-`bench/net/results/local-helper/build-x86_64.txt`); a second host's check against it is webpc's NET-HANDOVER.md's.
+`./build.sh --check` with the release's SHA256SUMS, and compare those with the hashes the page publishes.
+
+**Releases** are built by GitHub Actions (`.github/workflows/release.yml`) when a `v*` tag is pushed: `build.sh` runs on
+an x86_64 and an arm64 Linux runner, and the release is published only when the two SHA256SUMS are identical, with
+the binaries, `LICENSES.txt` and `SHA256SUMS`, and `INSTALL.md` as its notes. Before Actions, two clean builds on
+x86_64 Linux and one on aarch64 Linux (2026-11-01 and 2026-11-02) gave the same sums.
 
 ## Protocol
 
@@ -143,4 +145,6 @@ and close with 4001 (another version), 4003 (origin not accepted) or 4004 (wrong
 
 `go test -race ./...` runs a guest on gVisor's netstack against the helper over a real WebSocket (DHCP, router
 advertisements following the IPv6 reach, TCP both ways to this computer, the refusals). webpc's
-`tests/net-local.test.ts` boots Debian on the page through it (`scripts/ci-net.sh`). See [CLAUDE.md](CLAUDE.md).
+`tests/net-local.test.ts` boots Debian on the page through it (`scripts/ci-net.sh`), built at the commit webpc pins
+(its `tests/webpc-net.ts`). Each push to `main` runs `go vet` and the tests (`.github/workflows/ci.yml`). See
+[CLAUDE.md](CLAUDE.md).
