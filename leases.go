@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log"
 	"maps"
@@ -58,12 +59,17 @@ func openLeases(path string) *leaseBook {
 		return nil
 	}
 	b := &leaseBook{path: path, byMAC: map[string]string{}, seen: map[string]uint64{}, dirty: make(chan struct{}, 1), done: make(chan struct{})}
-	f, err := os.Open(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			log.Printf("ignored the kept leases (the guests may get other addresses): %v", err)
+	if stale, _ := filepath.Glob(path + ".new-*"); len(stale) > 0 { // a run that stopped mid-save
+		for _, s := range stale {
+			_ = os.Remove(s)
 		}
+	}
+	f, err := os.Open(path)
+	if os.IsNotExist(err) {
 		return b
+	} else if err != nil { // not overwritten either: the guests' addresses aren't kept this run
+		log.Printf("can't read the kept leases, so they aren't kept this run (the guests may get other addresses): %v", err)
+		return nil
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
@@ -74,8 +80,11 @@ func openLeases(path string) *leaseBook {
 			b.set(hw.String(), addr) // a later line (more recent) takes an address from an earlier one
 		}
 	}
-	if err := sc.Err(); err != nil {
-		log.Printf("ignored the rest of the kept leases (%s): %v", path, err)
+	if err := sc.Err(); errors.Is(err, bufio.ErrTooLong) {
+		log.Printf("ignored the rest of the kept leases (%s), which the next save drops: %v", path, err)
+	} else if err != nil {
+		log.Printf("can't read the kept leases, so they aren't kept this run (the guests may get other addresses): %v", err)
+		return nil
 	}
 	return b
 }
@@ -167,9 +176,9 @@ func (b *leaseBook) ack(f []byte) {
 	}
 }
 
-// run saves the book after each burst of acknowledgments, from the pool's leases (`pool`: address to MAC), until ctx
-// ends, and once more then; done is closed after that.
-func (b *leaseBook) run(ctx context.Context, pool func() map[string]string) {
+// run saves the book after each burst of acknowledgments, from the pool's leases (`pool`: address to MAC) and the MACs
+// on a link now (`live`), until ctx ends, and once more then; done is closed after that.
+func (b *leaseBook) run(ctx context.Context, pool func() map[string]string, live func() map[string]bool) {
 	if b == nil {
 		return
 	}
@@ -178,14 +187,14 @@ func (b *leaseBook) run(ctx context.Context, pool func() map[string]string) {
 		select {
 		case <-b.dirty:
 		case <-ctx.Done():
-			b.update(pool())
+			b.update(pool(), live())
 			return
 		}
 		select {
 		case <-time.After(saveAfter):
 		case <-ctx.Done():
 		}
-		b.update(pool())
+		b.update(pool(), live())
 	}
 }
 
@@ -199,12 +208,14 @@ func (b *leaseBook) Done() <-chan struct{} {
 	return b.done
 }
 
-// update makes the book this run's leases (the pool's, of MACs seen on a link, in the order they were last seen) after
-// those kept from before that this run hasn't taken over, the last maxKept of them, and writes it when it changed. The
-// same pool and the same sightings give the same book: nothing churns.
-func (b *leaseBook) update(leases map[string]string) {
+// update makes the book this run's leases (the pool's, of MACs seen on a link, in the order they were last seen, those
+// on a link now last of all) after those kept from before that this run hasn't taken over, the last maxKept of them, and
+// writes it when it changed. A guest connected now is never the one trimmed while fewer than maxKept are. The same pool
+// and the same sightings give the same book: nothing churns.
+func (b *leaseBook) update(leases map[string]string, live map[string]bool) {
 	type lease struct {
 		mac, ip string
+		live    bool
 		at      uint64
 	}
 	b.mu.Lock()
@@ -212,11 +223,16 @@ func (b *leaseBook) update(leases map[string]string) {
 	macs, ips := map[string]bool{}, map[string]bool{}
 	for ip, mac := range leases {
 		if at, ok := b.seen[mac]; ok && guestAddress(ip) {
-			now = append(now, lease{mac, ip, at})
+			now = append(now, lease{mac, ip, live[mac], at})
 			macs[mac], ips[ip] = true, true
 		}
 	}
-	slices.SortFunc(now, func(x, y lease) int { return cmp.Compare(x.at, y.at) })
+	slices.SortFunc(now, func(x, y lease) int {
+		if x.live != y.live {
+			return map[bool]int{true: 1, false: -1}[x.live]
+		}
+		return cmp.Compare(x.at, y.at)
+	})
 	var order []string
 	byMAC := map[string]string{}
 	for _, m := range b.order {
@@ -254,17 +270,31 @@ func (b *leaseBook) lines() []byte {
 	return buf.Bytes()
 }
 
-// save writes data as the book's file, through a temporary file of this process's renamed into place (run is its
-// only writer here; another helper on the same address can't run at once).
+// save writes data as the book's file, through a temporary file of this process's, synced and renamed into place (run
+// is its only writer; another helper on the same address starts only once this one's last save is made, main.go).
 func (b *leaseBook) save(data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(b.path), 0o700); err != nil {
 		return err
 	}
 	tmp := fmt.Sprintf("%s.new-%d", b.path, os.Getpid())
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, b.path)
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp, b.path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+	}
+	return err
 }
 
 // poolLeases is the network's DHCP pool (address to MAC). VirtualNetwork keeps it in an unexported field and serves

@@ -10,7 +10,7 @@ internet only through a relay (tailcat, Tailscale's DERP), because pages have no
 
 ## What you're trusting
 
-**About 950 lines of ours** (`*.go` here, tests, comments and blank lines aside), on **Podman's network stack**: the network itself (a
+**About 1,050 lines of ours** (`*.go` here, tests, comments and blank lines aside), on **Podman's network stack**: the network itself (a
 switch, DHCP, DHCPv6, DNS, router advertisements, and the forwarders that turn the guest's TCP, UDP and ICMP into
 this computer's connections) is [gvisor-tap-vsock](https://github.com/containers/gvisor-tap-vsock), the library
 behind Podman machine on macOS, Windows and Linux, Lima and CRC, on [gVisor](https://gvisor.dev)'s TCP/IP stack.
@@ -107,7 +107,8 @@ network knows a guest by its MAC: two with the same one share an address).
 Each guest's IPv4 address is kept (`leases-<address>` beside the token, for the address the helper listens on: a MAC
 and an address a line, the 100 most recently connected), and reserved for that MAC when the helper starts again
 there. What's kept comes from the network's own
-DHCP pool, for MACs seen on a page's link, never from frames, which a guest could make up. A page that reconnects to a restarted helper doesn't make its
+DHCP pool, never from frames, for the MACs seen on a page's link, the ones connected now kept first. A guest can still
+make up MACs of its own (16 a connection) and leases for them, as it can on any LAN; the 100 bound what that takes. A page that reconnects to a restarted helper doesn't make its
 guest ask for a new lease, so without this two running guests could swap or share an address at their next renewal
 (gvisor-tap-vsock's pool hands out addresses in order). DHCPv6's addresses aren't kept; a guest's duplicate address
 detection turns down one already in use, and its SLAAC address, from its MAC, stays the same.

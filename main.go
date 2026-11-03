@@ -114,14 +114,14 @@ func run(listen string, allowed []string, newToken bool, o Options) error {
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		<-ctx.Done()
+		select { // the guests' addresses saved a last time before the port is free for another helper on it
+		case <-h.leases.Done():
+		case <-time.After(3 * time.Second):
+		}
 		_ = srv.Close()
 	}()
 	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
-	}
-	select { // the guests' addresses, saved a last time
-	case <-h.leases.Done():
-	case <-time.After(3 * time.Second):
 	}
 	return nil
 }

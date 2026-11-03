@@ -681,6 +681,10 @@ func TestLeasesKept(t *testing.T) {
 	if got := lease(t, c, guestMAC, a); !got.Equal(a) {
 		t.Fatalf("the first guest got %v, not its %v", got, a)
 	}
+	third := [6]byte{0x52, 0x54, 0x00, 0x33, 0x33, 0x33}
+	if got := lease(t, c, third, nil); got.Equal(a) || got.Equal(b) || got.Equal(net.ParseIP(HostIP)) {
+		t.Fatalf("a new guest got %v (kept: %v, %v)", got, a, b)
+	}
 }
 
 // keptBoth waits (at most 5 s) until the leases file names each of macs.

@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -68,11 +69,14 @@ func config(o Options, static map[string]string) *types.Configuration {
 		Subnet:            Subnet,
 		GatewayIP:         GatewayIP,
 		GatewayMacAddress: GatewayMAC,
-		DHCPStaticLeases:  static,
+		DHCPStaticLeases:  map[string]string{HostIP: "host"}, // never a guest's: --host-loopback's address
 		Forwards:          map[string]string{},
 		NAT:               map[string]string{},
 		GatewayVirtualIPs: []string{},
 		Protocol:          types.QemuProtocol,
+	}
+	for ip, mac := range static {
+		c.DHCPStaticLeases[ip] = mac
 	}
 	if o.HostLoopback {
 		c.NAT[HostIP] = "127.0.0.1"
@@ -97,7 +101,7 @@ func NewHelper(ctx context.Context, token string, allowed []string, o Options) (
 		return nil, fmt.Errorf("the network: %w", err)
 	}
 	h := &Helper{vn: vn, token: token, allowed: allowed, ipv6: o.IPv6, leases: book, links: map[*link]struct{}{}}
-	go book.run(ctx, func() map[string]string { return poolLeases(vn) })
+	go book.run(ctx, func() map[string]string { return poolLeases(vn) }, h.liveMACs)
 	if o.IPv6 {
 		ro := Reach6Options{}
 		if o.Reach6 != nil {
@@ -109,6 +113,21 @@ func NewHelper(ctx context.Context, token string, allowed []string, o Options) (
 		})
 	}
 	return h, nil
+}
+
+// liveMACs is the MACs seen on the links connected now.
+func (h *Helper) liveMACs() map[string]bool {
+	m := map[string]bool{}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for l := range h.links {
+		l.macMu.Lock()
+		for mac := range l.macs {
+			m[net.HardwareAddr(mac[:]).String()] = true
+		}
+		l.macMu.Unlock()
+	}
+	return m
 }
 
 // reached tells the links whether to advertise an IPv6 default route.

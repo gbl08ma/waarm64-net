@@ -52,8 +52,9 @@ func TestLeaseBook(t *testing.T) {
 	if b := openLeases(""); b != nil || len(b.static()) != 0 {
 		t.Fatal("no file, no book")
 	}
-	// Best effort: a file that can't be read (a directory here) or a line past the scanner's limit starts it empty.
-	if b := openLeases(t.TempDir()); b == nil || len(b.static()) != 0 {
+	// Best effort: a file that can't be read (a directory here) keeps nothing this run, and isn't overwritten; a line
+	// past the scanner's limit ends what's read.
+	if b := openLeases(t.TempDir()); b != nil {
 		t.Fatal("a directory as the file")
 	}
 	long := filepath.Join(t.TempDir(), "leases")
@@ -72,7 +73,7 @@ func TestLeaseUpdate(t *testing.T) {
 		"192.168.127.3":   "52:54:00:00:00:02", // never a source on a link
 		"192.168.127.1":   "5a:94:ef:e4:0c:dd", // the gateway's reservation
 		"192.168.127.254": "52:54:00:00:00:01",
-	})
+	}, nil)
 	if got := fmt.Sprint(openLeases(b.path).static()); got != fmt.Sprint(map[string]string{"192.168.127.2": "52:54:00:00:00:01"}) {
 		t.Fatalf("kept %v", got)
 	}
@@ -90,20 +91,32 @@ func TestLeaseChurn(t *testing.T) {
 		b.saw(m)
 		pool[fmt.Sprintf("192.168.127.%d", 2+i)] = net.HardwareAddr(m[:]).String()
 	}
-	b.update(pool)
+	b.update(pool, nil)
 	first := slices.Clone(b.order)
 	if len(first) != maxKept || first[0] != str(20) || first[maxKept-1] != str(maxKept+19) {
 		t.Fatalf("kept %d, from %s to %s: want the last seen %d", len(first), first[0], first[len(first)-1], maxKept)
 	}
 	info, _ := os.Stat(b.path)
 	time.Sleep(20 * time.Millisecond)
-	b.update(pool)
+	b.update(pool, nil)
 	if again, _ := os.Stat(b.path); !slices.Equal(b.order, first) || !again.ModTime().Equal(info.ModTime()) {
 		t.Fatal("the same pool changed the book")
 	}
+	// A guest connected now stays, though seen before the rest (mac(21) is the oldest seen that's kept).
+	b.update(pool, map[string]bool{str(5): true})
+	if b.byMAC[str(5)] == "" || b.byMAC[str(20)] != "" || b.order[maxKept-1] != str(5) {
+		t.Fatalf("a connected guest trimmed: %v", b.order[maxKept-2:])
+	}
 	b.saw(mac(0)) // the first guest is back (its page reconnected)
-	b.update(pool)
-	if b.order[maxKept-1] != str(0) || b.byMAC[str(20)] != "" {
+	b.update(pool, nil)
+	if b.order[maxKept-1] != str(0) || b.byMAC[str(20)] != "" || b.byMAC[str(5)] != "" {
 		t.Fatalf("a MAC seen again: %v ... %v", b.order[:2], b.order[maxKept-2:])
+	}
+}
+
+// TestHostIPReserved: the host's address on the network is never a guest's (the pool hands out .2 to .254).
+func TestHostIPReserved(t *testing.T) {
+	if c := config(Options{}, map[string]string{"192.168.127.9": "52:54:00:00:00:09"}); c.DHCPStaticLeases[HostIP] == "" || c.DHCPStaticLeases["192.168.127.9"] == "" {
+		t.Fatalf("static leases %v", c.DHCPStaticLeases)
 	}
 }
