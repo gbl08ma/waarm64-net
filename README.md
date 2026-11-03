@@ -83,7 +83,7 @@ across restarts (the token is kept), so a page paired once reconnects whenever t
 | Flag | |
 |---|---|
 | `--listen 127.0.0.1:<port>` | where to listen (default `127.0.0.1:8740`; a loopback address only: `[::1]:<port>` too) |
-| `--origin <origin>` | a page origin to accept besides `https://vm.tny.im`, exactly (repeatable): a copy of webpc you serve yourself, or its dev server (the printed link still names `https://vm.tny.im`: put that origin in its place) |
+| `--origin <origin>` | a page origin to accept besides `https://vm.tny.im`, exactly (repeatable): a copy of webpc you serve yourself, or its dev server (the helper prints a pairing link for each) |
 | `--new-token` | a new token: pages paired before must pair again |
 | `--host-loopback` | the guest reaches this computer's own `127.0.0.1` at `192.168.127.254` (off: only the internet and the LAN) |
 | `--no-ipv6` | IPv4 only |
