@@ -92,11 +92,12 @@ func run(listen string, allowed []string, newToken bool, o Options) error {
 	} else if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if os.Getenv("WEBPC_NET_TOKEN") == "" { // the guests' addresses are kept beside a kept token (tests keep neither)
 		if p, err := tokenPath(); err == nil {
-			o.Leases = filepath.Join(filepath.Dir(p), "leases-"+port) // a helper per port, a network each
+			// A helper per address, a network each.
+			o.Leases = filepath.Join(filepath.Dir(p), "leases-"+strings.Map(fileSafe, net.JoinHostPort(host, port)))
 		}
 	}
 
@@ -118,7 +119,19 @@ func run(listen string, allowed []string, newToken bool, o Options) error {
 	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	select { // the guests' addresses, saved a last time
+	case <-h.leases.Done():
+	case <-time.After(3 * time.Second):
+	}
 	return nil
+}
+
+// fileSafe keeps an address's letters, digits and dots for a file's name; anything else is an underscore.
+func fileSafe(r rune) rune {
+	if r == '.' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' {
+		return r
+	}
+	return '_'
 }
 
 // wsaeaddrinuse is Windows' "address in use" (syscall.EADDRINUSE is Unix's there).

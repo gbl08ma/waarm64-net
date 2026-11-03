@@ -3,10 +3,12 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/binary"
 	"fmt"
 	"log"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -44,8 +46,10 @@ type leaseBook struct {
 	mu    sync.Mutex
 	order []string          // MACs, the least recent first
 	byMAC map[string]string // MAC to address
-	seen  map[string]struct{}
+	seen  map[string]uint64 // MACs seen as a source on a link, to when (a count: the latest connection's is highest)
+	count uint64
 	dirty chan struct{}
+	done  chan struct{} // closed once run has made its last save
 }
 
 // openLeases reads the kept leases at path (none if it doesn't exist or can't be read); a nil book with path "".
@@ -53,7 +57,7 @@ func openLeases(path string) *leaseBook {
 	if path == "" {
 		return nil
 	}
-	b := &leaseBook{path: path, byMAC: map[string]string{}, seen: map[string]struct{}{}, dirty: make(chan struct{}, 1)}
+	b := &leaseBook{path: path, byMAC: map[string]string{}, seen: map[string]uint64{}, dirty: make(chan struct{}, 1), done: make(chan struct{})}
 	f, err := os.Open(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -98,8 +102,8 @@ func (b *leaseBook) static() map[string]string {
 	return m
 }
 
-// set records mac's address as the most recent, dropping another MAC that had that address (the pool gave it to mac
-// since) and the least recent past maxKept; whether anything changed. Under b.mu (or before the book is shared).
+// set records mac's address as the most recent, dropping another MAC that had that address (a later line of the file
+// is a later lease) and the least recent past maxKept; whether anything changed. For reading the file.
 func (b *leaseBook) set(mac, ip string) bool {
 	if b.byMAC[mac] == ip && len(b.order) > 0 && b.order[len(b.order)-1] == mac {
 		return false
@@ -123,15 +127,24 @@ func (b *leaseBook) set(mac, ip string) bool {
 	return true
 }
 
-// saw notes mac as a frame's source on a link (only such MACs' leases are kept).
+// saw notes mac as a frame's source on a link, now (only such MACs' leases are kept, the most recently seen last);
+// past maxSeen the least recently seen is forgotten.
 func (b *leaseBook) saw(mac [6]byte) {
 	if b == nil {
 		return
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if len(b.seen) < maxSeen {
-		b.seen[net.HardwareAddr(mac[:]).String()] = struct{}{}
+	b.count++
+	b.seen[net.HardwareAddr(mac[:]).String()] = b.count
+	if len(b.seen) > maxSeen {
+		oldest, at := "", b.count
+		for m, n := range b.seen {
+			if n < at {
+				oldest, at = m, n
+			}
+		}
+		delete(b.seen, oldest)
 	}
 }
 
@@ -155,11 +168,12 @@ func (b *leaseBook) ack(f []byte) {
 }
 
 // run saves the book after each burst of acknowledgments, from the pool's leases (`pool`: address to MAC), until ctx
-// ends, and once more then.
+// ends, and once more then; done is closed after that.
 func (b *leaseBook) run(ctx context.Context, pool func() map[string]string) {
 	if b == nil {
 		return
 	}
+	defer close(b.done)
 	for {
 		select {
 		case <-b.dirty:
@@ -175,41 +189,79 @@ func (b *leaseBook) run(ctx context.Context, pool func() map[string]string) {
 	}
 }
 
-// update takes the pool's leases of MACs seen on a link into the book, and writes it when that changed it.
-func (b *leaseBook) update(leases map[string]string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	ips := make([]string, 0, len(leases))
-	for ip := range leases {
-		ips = append(ips, ip)
+// Done is closed once the book's last save is made (at once without a book).
+func (b *leaseBook) Done() <-chan struct{} {
+	if b == nil {
+		c := make(chan struct{})
+		close(c)
+		return c
 	}
-	slices.Sort(ips) // the same pool, the same file
-	changed := false
-	for _, ip := range ips {
-		mac := leases[ip]
-		if _, ok := b.seen[mac]; ok && guestAddress(ip) && b.byMAC[mac] != ip {
-			changed = b.set(mac, ip) || changed
+	return b.done
+}
+
+// update makes the book this run's leases (the pool's, of MACs seen on a link, in the order they were last seen) after
+// those kept from before that this run hasn't taken over, the last maxKept of them, and writes it when it changed. The
+// same pool and the same sightings give the same book: nothing churns.
+func (b *leaseBook) update(leases map[string]string) {
+	type lease struct {
+		mac, ip string
+		at      uint64
+	}
+	b.mu.Lock()
+	var now []lease
+	macs, ips := map[string]bool{}, map[string]bool{}
+	for ip, mac := range leases {
+		if at, ok := b.seen[mac]; ok && guestAddress(ip) {
+			now = append(now, lease{mac, ip, at})
+			macs[mac], ips[ip] = true, true
 		}
 	}
-	if !changed {
+	slices.SortFunc(now, func(x, y lease) int { return cmp.Compare(x.at, y.at) })
+	var order []string
+	byMAC := map[string]string{}
+	for _, m := range b.order {
+		if ip := b.byMAC[m]; !macs[m] && !ips[ip] {
+			order = append(order, m)
+			byMAC[m] = ip
+		}
+	}
+	for _, l := range now {
+		order = append(order, l.mac)
+		byMAC[l.mac] = l.ip
+	}
+	for len(order) > maxKept {
+		delete(byMAC, order[0])
+		order = order[1:]
+	}
+	if slices.Equal(order, b.order) && maps.Equal(byMAC, b.byMAC) {
+		b.mu.Unlock()
 		return
 	}
-	if err := b.save(); err != nil {
+	b.order, b.byMAC = order, byMAC
+	data := b.lines()
+	b.mu.Unlock()
+	if err := b.save(data); err != nil { // outside the lock: links note their sources meanwhile
 		log.Printf("couldn't keep the guests' addresses (a restart may give them others): %v", err)
 	}
 }
 
-// save writes the book whole, through a temporary file renamed into place. Under b.mu.
-func (b *leaseBook) save() error {
+// lines is the book as its file. Under b.mu.
+func (b *leaseBook) lines() []byte {
 	var buf bytes.Buffer
 	for _, mac := range b.order {
 		fmt.Fprintf(&buf, "%s %s\n", mac, b.byMAC[mac])
 	}
+	return buf.Bytes()
+}
+
+// save writes data as the book's file, through a temporary file of this process's renamed into place (run is its
+// only writer here; another helper on the same address can't run at once).
+func (b *leaseBook) save(data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(b.path), 0o700); err != nil {
 		return err
 	}
-	tmp := b.path + ".new"
-	if err := os.WriteFile(tmp, buf.Bytes(), 0o600); err != nil {
+	tmp := fmt.Sprintf("%s.new-%d", b.path, os.Getpid())
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, b.path)

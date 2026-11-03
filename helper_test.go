@@ -49,6 +49,13 @@ func destroyStack(h *Helper) {
 
 func helperServer(t *testing.T, o Options) string {
 	t.Helper()
+	host, _ := stoppableHelper(t, o)
+	return host
+}
+
+// stoppableHelper is helperServer with a stop: the helper's context ends and its last save of the leases is made.
+func stoppableHelper(t *testing.T, o Options) (string, func()) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	h, err := NewHelper(ctx, "tok", []string{DefaultOrigin, testOrigin}, o)
@@ -71,7 +78,14 @@ func helperServer(t *testing.T, o Options) string {
 		h.ServeHTTP(w, r)
 	}))
 	t.Cleanup(srv.Close)
-	return strings.TrimPrefix(srv.URL, "http://")
+	return strings.TrimPrefix(srv.URL, "http://"), func() {
+		cancel()
+		select {
+		case <-h.leases.Done():
+		case <-time.After(5 * time.Second):
+			t.Fatal("the leases' last save didn't come")
+		}
+	}
 }
 
 func dial(t *testing.T, host, path, origin string, protos ...string) *websocket.Conn {
@@ -655,10 +669,10 @@ func TestTwoGuests(t *testing.T) {
 // memory and hands out addresses in order: two running guests would otherwise swap or share one until a renewal).
 func TestLeasesKept(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "leases")
-	host := helperServer(t, Options{Leases: file})
+	host, stop := stoppableHelper(t, Options{Leases: file})
 	c := dial(t, host, "/tok", testOrigin, Subprotocol)
 	a, b := lease(t, c, guestMAC, nil), lease(t, c, otherMAC, nil)
-	keptBoth(t, file, guestMAC, otherMAC)
+	stop()                                        // at once, within saveAfter of the acknowledgments: the last save keeps them
 	host = helperServer(t, Options{Leases: file}) // the restart
 	c = dial(t, host, "/tok", testOrigin, Subprotocol)
 	if got := lease(t, c, otherMAC, b); !got.Equal(b) {
