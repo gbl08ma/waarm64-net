@@ -10,7 +10,7 @@ internet only through a relay (tailcat, Tailscale's DERP), because pages have no
 
 ## What you're trusting
 
-**About 900 lines of ours** (`*.go` here, tests, comments and blank lines aside), on **Podman's network stack**: the network itself (a
+**About 950 lines of ours** (`*.go` here, tests, comments and blank lines aside), on **Podman's network stack**: the network itself (a
 switch, DHCP, DHCPv6, DNS, router advertisements, and the forwarders that turn the guest's TCP, UDP and ICMP into
 this computer's connections) is [gvisor-tap-vsock](https://github.com/containers/gvisor-tap-vsock), the library
 behind Podman machine on macOS, Windows and Linux, Lima and CRC, on [gVisor](https://gvisor.dev)'s TCP/IP stack.
@@ -94,7 +94,7 @@ across restarts (the token is kept), so a page paired once reconnects whenever t
 It logs a line when it starts, for each page that connects or disconnects (its origin, how long) and for each refused
 one (why), and when this computer's IPv6 reach changes; nothing about the traffic. The token is in your config
 directory (`~/.config/webpc-net/token` on Linux, `~/Library/Application Support/webpc-net/token` on macOS,
-`%AppData%\webpc-net\token` on Windows), and beside it `leases`, the address each guest's MAC was given (below).
+`%AppData%\webpc-net\token` on Windows), and beside it `leases-<port>`, the address each guest's MAC was given (below).
 
 ## The network
 
@@ -103,8 +103,9 @@ The guest gets `192.168.127.0/24` by DHCP (gateway and DNS at `.1`, as Podman ma
 computer's resolver. Every page connected to one helper is on the same switch: two machines (or two adapters)
 attached to it share a LAN, each with its own WebSocket and its own address.
 
-Each guest's IPv4 address is kept (`leases` beside the token: a MAC and an address a line, the 200 most recent), and
-reserved for that MAC when the helper starts again. A page that reconnects to a restarted helper doesn't make its
+Each guest's IPv4 address is kept (`leases-<port>` beside the token: a MAC and an address a line, the 100 most
+recent), and reserved for that MAC when the helper starts again on that port. What's kept comes from the network's own
+DHCP pool, for MACs seen on a page's link, never from frames, which a guest could make up. A page that reconnects to a restarted helper doesn't make its
 guest ask for a new lease, so without this two running guests could swap or share an address at their next renewal
 (gvisor-tap-vsock's pool hands out addresses in order). DHCPv6's addresses aren't kept; a guest's duplicate address
 detection turns down one already in use, and its SLAAC address, from its MAC, stays the same.

@@ -22,7 +22,8 @@ this one as `../webpc`). It imports nothing from webpc; webpc's tests build it a
 - **The fork:** `go.mod` replaces `github.com/containers/gvisor-tap-vsock` with evidolob's fork at one commit of
   [#745](https://github.com/containers/gvisor-tap-vsock/pull/745) (IPv6). Move it deliberately: read the new commits,
   bump the pseudo-version (`go mod download -json github.com/evidolob/gvisor-tap-vsock@<sha>`), run the tests, update
-  THIRD_PARTY.md. When #745 lands in a release, drop the `replace` and require the release (that also unblocks
+  THIRD_PARTY.md. `leases.go` reads the network's DHCP pool from an unexported field (`ipPool`), as the tests read its
+  stack: `TestLeasesKept` fails if a bump moves it. When #745 lands in a release, drop the `replace` and require the release (that also unblocks
   `go install`).
 - **Reproducible:** `./build.sh <version>` builds the six targets with the pinned toolchain and baseline levels, the
   release's `LICENSES.txt` (`licenses.sh`) and `INSTALL.md` (the install lines with the hashes); two builds give the same

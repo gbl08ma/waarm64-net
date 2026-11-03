@@ -22,10 +22,7 @@ func TestLeaseBook(t *testing.T) {
 	if err := os.WriteFile(file, []byte(lines), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	b, err := openLeases(file)
-	if err != nil {
-		t.Fatal(err)
-	}
+	b := openLeases(file)
 	got := b.static()
 	want := map[string]string{"192.168.127.2": "52:54:00:00:00:06", "192.168.127.7": "52:54:00:00:00:07"}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
@@ -45,11 +42,35 @@ func TestLeaseBook(t *testing.T) {
 	if err := b.save(); err != nil {
 		t.Fatal(err)
 	}
-	again, err := openLeases(file) // the 10.0/16 lines aren't the network's: only .9's
-	if err != nil || fmt.Sprint(again.static()) != fmt.Sprint(map[string]string{"192.168.127.9": "52:54:00:00:00:0a"}) {
-		t.Fatalf("read back: %v, %v", again.static(), err)
+	again := openLeases(file) // the 10.0/16 lines aren't the network's: only .9's
+	if fmt.Sprint(again.static()) != fmt.Sprint(map[string]string{"192.168.127.9": "52:54:00:00:00:0a"}) {
+		t.Fatalf("read back: %v", again.static())
 	}
-	if b, err := openLeases(""); b != nil || err != nil || len(b.static()) != 0 {
+	if b := openLeases(""); b != nil || len(b.static()) != 0 {
 		t.Fatal("no file, no book")
+	}
+	// Best effort: a file that can't be read (a directory here) or a line past the scanner's limit starts it empty.
+	if b := openLeases(t.TempDir()); b == nil || len(b.static()) != 0 {
+		t.Fatal("a directory as the file")
+	}
+	long := filepath.Join(t.TempDir(), "leases")
+	_ = os.WriteFile(long, append([]byte("52:54:00:00:00:01 192.168.127.2\n"), make([]byte, 1<<17)...), 0o600)
+	if b := openLeases(long); len(b.static()) != 1 {
+		t.Fatalf("a long line: %v", b.static())
+	}
+}
+
+// TestLeaseUpdate: only the pool's leases of MACs seen on a link are kept, and only the network's guest addresses.
+func TestLeaseUpdate(t *testing.T) {
+	b := openLeases(filepath.Join(t.TempDir(), "leases"))
+	b.saw([6]byte{0x52, 0x54, 0, 0, 0, 1})
+	b.update(map[string]string{
+		"192.168.127.2":   "52:54:00:00:00:01",
+		"192.168.127.3":   "52:54:00:00:00:02", // never a source on a link
+		"192.168.127.1":   "5a:94:ef:e4:0c:dd", // the gateway's reservation
+		"192.168.127.254": "52:54:00:00:00:01",
+	})
+	if got := fmt.Sprint(openLeases(b.path).static()); got != fmt.Sprint(map[string]string{"192.168.127.2": "52:54:00:00:00:01"}) {
+		t.Fatalf("kept %v", got)
 	}
 }

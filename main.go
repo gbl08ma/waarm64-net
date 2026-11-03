@@ -96,7 +96,7 @@ func run(listen string, allowed []string, newToken bool, o Options) error {
 	defer stop()
 	if os.Getenv("WEBPC_NET_TOKEN") == "" { // the guests' addresses are kept beside a kept token (tests keep neither)
 		if p, err := tokenPath(); err == nil {
-			o.Leases = filepath.Join(filepath.Dir(p), "leases")
+			o.Leases = filepath.Join(filepath.Dir(p), "leases-"+port) // a helper per port, a network each
 		}
 	}
 

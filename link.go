@@ -104,6 +104,7 @@ func (l *link) learn(msg []byte) (fresh bool, err error) {
 			l.macMu.Lock()
 			if _, ok := l.macs[mac]; !ok && len(l.macs) < maxMACs {
 				l.macs[mac] = struct{}{}
+				l.h.leases.saw(mac)
 				fresh = true
 			}
 			l.macMu.Unlock()
@@ -171,7 +172,7 @@ func (l *link) Write(b []byte) (int, error) {
 		return 0, net.ErrClosed
 	}
 	if len(b) >= 4 {
-		l.h.leases.ack(b[4:]) // the guests' addresses, kept for a restart (a file's write, rarely: an acknowledgment)
+		l.h.leases.ack(b[4:]) // the gateway's DHCP reply schedules keeping the guests' addresses (leases.go)
 	}
 	if l.h.ipv6 && len(b) >= 4 && int(binary.BigEndian.Uint32(b)) == len(b)-4 {
 		if f, ok := markRouter(b[4:]); ok {

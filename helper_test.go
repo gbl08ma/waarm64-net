@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -657,6 +658,7 @@ func TestLeasesKept(t *testing.T) {
 	host := helperServer(t, Options{Leases: file})
 	c := dial(t, host, "/tok", testOrigin, Subprotocol)
 	a, b := lease(t, c, guestMAC, nil), lease(t, c, otherMAC, nil)
+	keptBoth(t, file, guestMAC, otherMAC)
 	host = helperServer(t, Options{Leases: file}) // the restart
 	c = dial(t, host, "/tok", testOrigin, Subprotocol)
 	if got := lease(t, c, otherMAC, b); !got.Equal(b) {
@@ -664,5 +666,57 @@ func TestLeasesKept(t *testing.T) {
 	}
 	if got := lease(t, c, guestMAC, a); !got.Equal(a) {
 		t.Fatalf("the first guest got %v, not its %v", got, a)
+	}
+}
+
+// keptBoth waits (at most 5 s) until the leases file names each of macs.
+func keptBoth(t *testing.T, file string, macs ...[6]byte) {
+	t.Helper()
+	for range 100 {
+		b, _ := os.ReadFile(file)
+		all := true
+		for _, m := range macs {
+			all = all && strings.Contains(string(b), net.HardwareAddr(m[:]).String())
+		}
+		if all {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("the leases file doesn't name %v", macs)
+}
+
+// TestForgedAck: an acknowledgment a guest makes up (from the gateway's MAC and address, to a second MAC of its own,
+// which the switch sends back to its link) isn't kept: the book takes the pool's leases, not frames'.
+func TestForgedAck(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "leases")
+	c := dial(t, helperServer(t, Options{Leases: file}), "/tok", testOrigin, Subprotocol)
+	lease(t, c, guestMAC, nil)
+	keptBoth(t, file, guestMAC)
+	second := [6]byte{0x52, 0x54, 0x00, 0x77, 0x77, 0x77}
+	hello := make([]byte, 60) // a frame from the second MAC, so the switch learns it's on this link
+	copy(hello, layers.EthernetBroadcast)
+	copy(hello[6:], second[:])
+	send(t, c, hello)
+	ack, err := dhcpv4.NewDiscovery(net.HardwareAddr(otherMAC[:]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ack.OpCode = dhcpv4.OpcodeBootReply
+	ack.UpdateOption(dhcpv4.OptMessageType(dhcpv4.MessageTypeAck))
+	ack.YourIPAddr = net.IPv4(192, 168, 127, 99)
+	gw, _ := net.ParseMAC(GatewayMAC)
+	ip := &layers.IPv4{Version: 4, TTL: 64, Protocol: layers.IPProtocolUDP, SrcIP: net.ParseIP(GatewayIP).To4(), DstIP: net.IPv4bcast}
+	udp := &layers.UDP{SrcPort: 67, DstPort: 68}
+	_ = udp.SetNetworkLayerForChecksum(ip)
+	buf := gopacket.NewSerializeBuffer()
+	if err := gopacket.SerializeLayers(buf, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true},
+		&layers.Ethernet{SrcMAC: gw, DstMAC: second[:], EthernetType: layers.EthernetTypeIPv4}, ip, udp, gopacket.Payload(ack.ToBytes())); err != nil {
+		t.Fatal(err)
+	}
+	send(t, c, buf.Bytes())
+	time.Sleep(saveAfter + 500*time.Millisecond)
+	if b, _ := os.ReadFile(file); strings.Contains(string(b), "192.168.127.99") || strings.Contains(string(b), net.HardwareAddr(otherMAC[:]).String()) {
+		t.Fatalf("a forged acknowledgment was kept:\n%s", b)
 	}
 }

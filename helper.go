@@ -91,15 +91,13 @@ func NewHelper(ctx context.Context, token string, allowed []string, o Options) (
 	if o.MTU == 0 {
 		o.MTU = 1500
 	}
-	book, err := openLeases(o.Leases)
-	if err != nil {
-		return nil, err
-	}
+	book := openLeases(o.Leases)
 	vn, err := virtualnetwork.New(config(o, book.static()))
 	if err != nil {
 		return nil, fmt.Errorf("the network: %w", err)
 	}
 	h := &Helper{vn: vn, token: token, allowed: allowed, ipv6: o.IPv6, leases: book, links: map[*link]struct{}{}}
+	go book.run(ctx, func() map[string]string { return poolLeases(vn) })
 	if o.IPv6 {
 		ro := Reach6Options{}
 		if o.Reach6 != nil {
