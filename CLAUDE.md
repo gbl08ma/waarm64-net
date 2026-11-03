@@ -63,7 +63,9 @@ notes, only when both SHA256SUMS are identical. No macOS or Windows runners (10Ã
 cross-compiled and reproducible anyway. Releasing is separate from webpc's deploy: a release changes nothing on
 webpc's page until webpc's `web/local-release.ts` takes its SHA256SUMS.
 
-A release: tag `vX.Y.Z` on `main` (the Go module's version too) and push the tag. Then webpc's `web/local-release.ts`
+A release: only after an out-of-context review of what it adds (the user's, 2026-11-03: a release costs runner minutes,
+and one cut too early means another), and after `ci.yml` passed on its commit; then tag `vX.Y.Z` on `main` (the Go
+module's version too) and push the tag. Then webpc's `web/local-release.ts`
 takes the release's version and sums.
 
 Status and the next steps: webpc's `NET-HANDOVER.md` while the track is open.
