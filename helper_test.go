@@ -57,11 +57,18 @@ func helperServer(t *testing.T, o Options) string {
 func stoppableHelper(t *testing.T, o Options) (string, func()) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
 	h, err := NewHelper(ctx, "tok", []string{DefaultOrigin, testOrigin}, o)
 	if err != nil {
+		cancel()
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { // the leases' last save, before t.TempDir's cleanup removes their directory
+		cancel()
+		select {
+		case <-h.leases.Done():
+		case <-time.After(5 * time.Second):
+		}
+	})
 	var serving sync.WaitGroup
 	t.Cleanup(func() { // last: after the test's connections and the server have closed
 		done := make(chan struct{})
