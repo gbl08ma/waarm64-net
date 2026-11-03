@@ -170,6 +170,9 @@ func (l *link) Write(b []byte) (int, error) {
 	if l.ctx.Err() != nil {
 		return 0, net.ErrClosed
 	}
+	if len(b) >= 4 {
+		l.h.leases.ack(b[4:]) // the guests' addresses, kept for a restart (a file's write, rarely: an acknowledgment)
+	}
 	if l.h.ipv6 && len(b) >= 4 && int(binary.BigEndian.Uint32(b)) == len(b)-4 {
 		if f, ok := markRouter(b[4:]); ok {
 			b = append(b[:4:4], f...)

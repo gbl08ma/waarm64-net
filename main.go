@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -93,6 +94,11 @@ func run(listen string, allowed []string, newToken bool, o Options) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+	if os.Getenv("WEBPC_NET_TOKEN") == "" { // the guests' addresses are kept beside a kept token (tests keep neither)
+		if p, err := tokenPath(); err == nil {
+			o.Leases = filepath.Join(filepath.Dir(p), "leases")
+		}
+	}
 
 	h, err := NewHelper(ctx, token, allowed, o)
 	if err != nil {

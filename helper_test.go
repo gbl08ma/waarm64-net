@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -362,16 +364,24 @@ func TestNoIPv6(t *testing.T) {
 // guestStack is a guest on gVisor's netstack at 192.168.127.2 whose frames cross c.
 func guestStack(t *testing.T, c *websocket.Conn) *stack.Stack {
 	t.Helper()
-	ep := channel.New(256, 1500, tcpip.LinkAddress(guestMAC[:]))
+	return guestStackAt(t, c, guestMAC, net.IPv4(192, 168, 127, 2))
+}
+
+// guestStackAt is a guest on gVisor's netstack with mac and ip whose frames cross c.
+func guestStackAt(t *testing.T, c *websocket.Conn, mac [6]byte, ip net.IP) *stack.Stack {
+	t.Helper()
+	ep := channel.New(256, 1500, tcpip.LinkAddress(mac[:]))
 	s := stack.New(stack.Options{NetworkProtocols: []stack.NetworkProtocolFactory{ipv4.NewProtocol, arp.NewProtocol}, TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol}})
 	t.Cleanup(s.Destroy)
 	if err := s.CreateNIC(1, ethernet.New(ep)); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.AddProtocolAddress(1, tcpip.ProtocolAddress{Protocol: ipv4.ProtocolNumber, AddressWithPrefix: tcpip.AddrFrom4([4]byte{192, 168, 127, 2}).WithPrefix()}, stack.AddressProperties{}); err != nil {
+	if err := s.AddProtocolAddress(1, tcpip.ProtocolAddress{Protocol: ipv4.ProtocolNumber, AddressWithPrefix: tcpip.AddressWithPrefix{Address: tcpip.AddrFrom4([4]byte(ip.To4())), PrefixLen: 24}}, stack.AddressProperties{}); err != nil {
 		t.Fatal(err)
 	}
-	s.SetRouteTable([]tcpip.Route{{Destination: header.IPv4EmptySubnet, Gateway: tcpip.AddrFrom4([4]byte{192, 168, 127, 1}), NIC: 1}})
+	// The /24 on the link, as a guest's DHCP lease gives it (guests reach each other directly), and the gateway.
+	onLink, _ := tcpip.NewSubnet(tcpip.AddrFrom4([4]byte{192, 168, 127, 0}), tcpip.MaskFromBytes([]byte{255, 255, 255, 0}))
+	s.SetRouteTable([]tcpip.Route{{Destination: onLink, NIC: 1}, {Destination: header.IPv4EmptySubnet, Gateway: tcpip.AddrFrom4([4]byte{192, 168, 127, 1}), NIC: 1}})
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go func() { // guest → helper
@@ -559,5 +569,100 @@ func TestNoHostLoopbackUDP(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// lease is the IPv4 address the helper acknowledges for mac's DHCP request (one asking for want, as a renewal after the
+// helper restarted under a running guest does), on c.
+func lease(t *testing.T, c *websocket.Conn, mac [6]byte, want net.IP) net.IP {
+	t.Helper()
+	m, err := dhcpv4.NewDiscovery(net.HardwareAddr(mac[:]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.UpdateOption(dhcpv4.OptMessageType(dhcpv4.MessageTypeRequest))
+	if want != nil {
+		m.UpdateOption(dhcpv4.OptRequestedIPAddress(want))
+	}
+	buf := gopacket.NewSerializeBuffer()
+	ip := &layers.IPv4{Version: 4, TTL: 64, Protocol: layers.IPProtocolUDP, SrcIP: net.IPv4zero, DstIP: net.IPv4bcast}
+	udp := &layers.UDP{SrcPort: 68, DstPort: 67}
+	_ = udp.SetNetworkLayerForChecksum(ip)
+	if err := gopacket.SerializeLayers(buf, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true},
+		&layers.Ethernet{SrcMAC: mac[:], DstMAC: layers.EthernetBroadcast, EthernetType: layers.EthernetTypeIPv4}, ip, udp, gopacket.Payload(m.ToBytes())); err != nil {
+		t.Fatal(err)
+	}
+	send(t, c, buf.Bytes())
+	var got net.IP
+	await(t, c, "a DHCP acknowledgment", func(p gopacket.Packet) bool {
+		u, _ := p.Layer(layers.LayerTypeUDP).(*layers.UDP)
+		if u == nil || u.DstPort != 68 {
+			return false
+		}
+		a, err := dhcpv4.FromBytes(u.Payload)
+		if err != nil || a.MessageType() != dhcpv4.MessageTypeAck || !bytes.Equal(a.ClientHWAddr, mac[:]) {
+			return false
+		}
+		got = a.YourIPAddr
+		return true
+	})
+	return got
+}
+
+var otherMAC = [6]byte{0x52, 0x54, 0x00, 0x65, 0x43, 0x21}
+
+// TestTwoGuests: two machines, each on its own WebSocket to one helper, get their own leases and reach each other
+// (one switch: a LAN).
+func TestTwoGuests(t *testing.T) {
+	host := helperServer(t, Options{})
+	ca, cb := dial(t, host, "/tok", testOrigin, Subprotocol), dial(t, host, "/tok", testOrigin, Subprotocol)
+	a, b := lease(t, ca, guestMAC, nil), lease(t, cb, otherMAC, nil)
+	if a.Equal(b) {
+		t.Fatalf("both guests got %v", a)
+	}
+	sa, sb := guestStackAt(t, ca, guestMAC, a), guestStackAt(t, cb, otherMAC, b)
+	ln, err := gonet.ListenTCP(sa, tcpip.FullAddress{NIC: 1, Port: 7}, ipv4.ProtocolNumber)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		s, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer s.Close()
+		_, _ = io.Copy(s, io.LimitReader(s, 1<<16))
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	conn, err := gonet.DialContextTCP(ctx, sb, tcpip.FullAddress{NIC: 1, Addr: tcpip.AddrFrom4([4]byte(a.To4())), Port: 7}, ipv4.ProtocolNumber)
+	if err != nil {
+		t.Fatalf("guest %v to guest %v: %v", b, a, err)
+	}
+	defer conn.Close()
+	want := bytes.Repeat([]byte("from one guest to the other "), 4096)[:1<<16]
+	go func() { _, _ = conn.Write(want) }()
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	got := make([]byte, len(want))
+	if _, err := io.ReadFull(conn, got); err != nil || !bytes.Equal(got, want) {
+		t.Fatalf("echo across the switch: %v", err)
+	}
+}
+
+// TestLeasesKept: a restarted helper gives each guest the address it had, whichever asks first (its pool is in
+// memory and hands out addresses in order: two running guests would otherwise swap or share one until a renewal).
+func TestLeasesKept(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "leases")
+	host := helperServer(t, Options{Leases: file})
+	c := dial(t, host, "/tok", testOrigin, Subprotocol)
+	a, b := lease(t, c, guestMAC, nil), lease(t, c, otherMAC, nil)
+	host = helperServer(t, Options{Leases: file}) // the restart
+	c = dial(t, host, "/tok", testOrigin, Subprotocol)
+	if got := lease(t, c, otherMAC, b); !got.Equal(b) {
+		t.Fatalf("the second guest asked first and got %v, not its %v", got, b)
+	}
+	if got := lease(t, c, guestMAC, a); !got.Equal(a) {
+		t.Fatalf("the first guest got %v, not its %v", got, a)
 	}
 }

@@ -43,6 +43,8 @@ type Options struct {
 	// IPv6 gives the guest IPv6 (always on-link; a default route only while the host reaches the internet over IPv6).
 	IPv6 bool
 	MTU  int
+	// Leases is a file that keeps the guests' IPv4 addresses across restarts ("" keeps none: leases.go).
+	Leases string
 	// Reach6 overrides how the host's IPv6 reach is checked (tests).
 	Reach6 *Reach6Options
 }
@@ -54,18 +56,19 @@ type Helper struct {
 	allowed []string
 	ipv6    bool
 	reach   *Reach6
+	leases  *leaseBook
 
 	mu    sync.Mutex
 	links map[*link]struct{}
 }
 
-func config(o Options) *types.Configuration {
+func config(o Options, static map[string]string) *types.Configuration {
 	c := &types.Configuration{
 		MTU:               o.MTU,
 		Subnet:            Subnet,
 		GatewayIP:         GatewayIP,
 		GatewayMacAddress: GatewayMAC,
-		DHCPStaticLeases:  map[string]string{},
+		DHCPStaticLeases:  static,
 		Forwards:          map[string]string{},
 		NAT:               map[string]string{},
 		GatewayVirtualIPs: []string{},
@@ -88,11 +91,15 @@ func NewHelper(ctx context.Context, token string, allowed []string, o Options) (
 	if o.MTU == 0 {
 		o.MTU = 1500
 	}
-	vn, err := virtualnetwork.New(config(o))
+	book, err := openLeases(o.Leases)
+	if err != nil {
+		return nil, err
+	}
+	vn, err := virtualnetwork.New(config(o, book.static()))
 	if err != nil {
 		return nil, fmt.Errorf("the network: %w", err)
 	}
-	h := &Helper{vn: vn, token: token, allowed: allowed, ipv6: o.IPv6, links: map[*link]struct{}{}}
+	h := &Helper{vn: vn, token: token, allowed: allowed, ipv6: o.IPv6, leases: book, links: map[*link]struct{}{}}
 	if o.IPv6 {
 		ro := Reach6Options{}
 		if o.Reach6 != nil {
