@@ -122,7 +122,7 @@ func TestRefusals(t *testing.T) {
 		{"long origin", "/tok", "https://" + strings.Repeat("a", 100) + ".test", []string{Subprotocol}, CloseOrigin},
 		{"token", "/tak", testOrigin, []string{Subprotocol}, CloseToken},
 		{"no token", "/", testOrigin, []string{Subprotocol}, CloseToken},
-		{"version", "/tok", testOrigin, []string{"webpc-net.v0"}, CloseVersion},
+		{"version", "/tok", testOrigin, []string{"waarm64-net.v0"}, CloseVersion},
 		{"no version", "/tok", testOrigin, nil, CloseVersion},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

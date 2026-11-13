@@ -19,7 +19,7 @@ import (
 )
 
 // Subprotocol names the page's and the helper's framing, so either refuses the other clearly when they differ.
-const Subprotocol = "webpc-net.v1"
+const Subprotocol = "waarm64-net.v1"
 
 // The guest's network: Podman machine's IPv4 subnet, and a ULA /64 of ours (fd77:6562:7063: "web" "pc").
 const (

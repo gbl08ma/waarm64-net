@@ -1,4 +1,4 @@
-// webpc-net puts a browser VM's network on this computer's sockets. The page (webpc, https://vm.tny.im)
+// waarm64-net puts a browser VM's network on this computer's sockets. The page (waarm64, https://vm.tny.im)
 // connects over a WebSocket on loopback and sends the guest's Ethernet frames; gvisor-tap-vsock's userspace network
 // (Podman machine's, Lima's) gives the guest DHCP, DNS and a gateway whose TCP, UDP and ICMP go out through this
 // program's own sockets. README.md says what is ours and what is imported.
@@ -51,14 +51,14 @@ func main() {
 	)
 	flag.Var(&allowed, "origin", "a page origin to accept besides "+DefaultOrigin+" (repeatable; e.g. http://localhost:8080)")
 	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "%s: a fast network for webpc's virtual machines, on this computer's own sockets.\n"+
-			"It prints a link; open it in the browser to pair the page. README.md: https://github.com/gbl08ma/webpc-net\n\n"+
-			"Usage: webpc-net [flags]\n", Version())
+		fmt.Fprintf(flag.CommandLine.Output(), "%s: a fast network for waarm64's virtual machines, on this computer's own sockets.\n"+
+			"It prints a link; open it in the browser to pair the page. README.md: https://github.com/gbl08ma/waarm64-net\n\n"+
+			"Usage: waarm64-net [flags]\n", Version())
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 	if flag.NArg() > 0 {
-		fmt.Fprintf(os.Stderr, "webpc-net takes no arguments, only flags (%q)\n", flag.Args())
+		fmt.Fprintf(os.Stderr, "waarm64-net takes no arguments, only flags (%q)\n", flag.Args())
 		os.Exit(2)
 	}
 	if *version {
@@ -88,13 +88,13 @@ func run(listen string, allowed []string, newToken bool, o Options) error {
 	}
 	ln, err := net.Listen("tcp", listen)
 	if errno := syscall.Errno(0); errors.Is(err, syscall.EADDRINUSE) || (errors.As(err, &errno) && errno == wsaeaddrinuse) {
-		return fmt.Errorf("%s is taken: is another webpc-net running? (--listen 127.0.0.1:<port> picks another port)", listen)
+		return fmt.Errorf("%s is taken: is another waarm64-net running? (--listen 127.0.0.1:<port> picks another port)", listen)
 	} else if err != nil {
 		return err
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if os.Getenv("WEBPC_NET_TOKEN") == "" { // the guests' addresses are kept beside a kept token (tests keep neither)
+	if os.Getenv("WAARM64_NET_TOKEN") == "" { // the guests' addresses are kept beside a kept token (tests keep neither)
 		if p, err := tokenPath(); err == nil {
 			// A helper per address, a network each.
 			o.Leases = filepath.Join(filepath.Dir(p), "leases-"+strings.Map(fileSafe, net.JoinHostPort(host, port)))
@@ -137,7 +137,7 @@ func fileSafe(r rune) rune {
 // wsaeaddrinuse is Windows' "address in use" (syscall.EADDRINUSE is Unix's there).
 const wsaeaddrinuse = 10048
 
-// MaxMTU is the largest MTU a link can have: the largest the page takes and was measured with (webpc's
+// MaxMTU is the largest MTU a link can have: the largest the page takes and was measured with (waarm64's
 // docs/plans/networking-local.md §3 "The MTU").
 const MaxMTU = 65520
 

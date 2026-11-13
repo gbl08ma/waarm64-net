@@ -261,7 +261,7 @@ func (l *link) Close() error {
 	return l.c.CloseNow()
 }
 
-func (l *link) LocalAddr() net.Addr                { return addr("webpc-net") }
+func (l *link) LocalAddr() net.Addr                { return addr("waarm64-net") }
 func (l *link) RemoteAddr() net.Addr               { return addr("page") }
 func (l *link) SetDeadline(t time.Time) error      { return nil }
 func (l *link) SetReadDeadline(t time.Time) error  { return nil }

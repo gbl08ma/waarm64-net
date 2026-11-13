@@ -1,4 +1,4 @@
-module github.com/gbl08ma/webpc-net
+module github.com/gbl08ma/waarm64-net
 
 go 1.27
 

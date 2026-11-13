@@ -18,12 +18,12 @@ var version string
 // Version is the release's version, or the module's as `go install` stamps it ("devel" from a checkout).
 func Version() string {
 	if version != "" {
-		return "webpc-net " + version
+		return "waarm64-net " + version
 	}
 	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
-		return "webpc-net " + bi.Main.Version
+		return "waarm64-net " + bi.Main.Version
 	}
-	return "webpc-net devel"
+	return "waarm64-net devel"
 }
 
 // tokenPath is where the token is kept, so a page's stored connection survives a restart of the helper.
@@ -32,12 +32,12 @@ func tokenPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("no config directory for the token: %w", err)
 	}
-	return filepath.Join(dir, "webpc-net", "token"), nil
+	return filepath.Join(dir, "waarm64-net", "token"), nil
 }
 
-// loadToken reads the kept token, or makes one (always, with fresh) and keeps it. WEBPC_NET_TOKEN overrides both (tests).
+// loadToken reads the kept token, or makes one (always, with fresh) and keeps it. WAARM64_NET_TOKEN overrides both (tests).
 func loadToken(fresh bool) (string, error) {
-	if t := os.Getenv("WEBPC_NET_TOKEN"); t != "" {
+	if t := os.Getenv("WAARM64_NET_TOKEN"); t != "" {
 		return t, nil
 	}
 	p, err := tokenPath()

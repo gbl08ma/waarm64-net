@@ -1,11 +1,11 @@
-# webpc-net
+# waarm64-net
 
-A small program you run on your own computer to give a [webpc](https://vm.tny.im) virtual machine a fast network:
+A small program you run on your own computer to give a [waarm64](https://vm.tny.im) virtual machine a fast network:
 the page in your browser connects to it over a WebSocket on `127.0.0.1`, and the guest's traffic goes out through
 this computer's own sockets, at loopback's latency and your own uplink's speed. Without it, a browser can reach the
 internet only through a relay (tailcat, Tailscale's DERP), because pages have no UDP.
 
-> **Status: early** (v0.1.0; webpc's `docs/plans/networking-local.md` is the plan). Every name (the program's, the
+> **Status: early** (v0.1.0; waarm64's `docs/plans/networking-local.md` is the plan). Every name (the program's, the
 > subprotocol, the port) is provisional.
 
 ## What you're trusting
@@ -38,41 +38,41 @@ visit could use it as a way into your LAN.
 
 ## Install
 
-Each [release](https://github.com/gbl08ma/webpc-net/releases)'s notes have these lines with its hashes filled in
-(`INSTALL.md`, which `build.sh` writes), and webpc's page shows them for your platform. Each downloads one binary to `~/.local/bin`
-(`%LOCALAPPDATA%\Programs\webpc-net` on Windows), checks it against the published SHA-256, marks it executable and
+Each [release](https://github.com/gbl08ma/waarm64-net/releases)'s notes have these lines with its hashes filled in
+(`INSTALL.md`, which `build.sh` writes), and waarm64's page shows them for your platform. Each downloads one binary to `~/.local/bin`
+(`%LOCALAPPDATA%\Programs\waarm64-net` on Windows), checks it against the published SHA-256, marks it executable and
 runs it. Nothing installs itself, asks for administrator rights or starts at login: you run it when you want the
 network. On Linux, x86_64 (`linux-arm64`, `darwin-amd64` and `darwin-arm64` are the same lines, `shasum -a 256 -c`
 on macOS):
 
 ```sh
 mkdir -p ~/.local/bin
-curl -fLo ~/.local/bin/webpc-net https://github.com/gbl08ma/webpc-net/releases/download/<version>/webpc-net-<version>-linux-amd64
-echo "<its sha256>  $HOME/.local/bin/webpc-net" | sha256sum -c || rm ~/.local/bin/webpc-net
-chmod +x ~/.local/bin/webpc-net
-~/.local/bin/webpc-net
+curl -fLo ~/.local/bin/waarm64-net https://github.com/gbl08ma/waarm64-net/releases/download/<version>/waarm64-net-<version>-linux-amd64
+echo "<its sha256>  $HOME/.local/bin/waarm64-net" | sha256sum -c || rm ~/.local/bin/waarm64-net
+chmod +x ~/.local/bin/waarm64-net
+~/.local/bin/waarm64-net
 ```
 
 On Windows, in PowerShell (`windows-arm64.exe` for ARM):
 
 ```powershell
-$d = "$env:LOCALAPPDATA\Programs\webpc-net"; New-Item -ItemType Directory -Force $d | Out-Null; $ProgressPreference = 'SilentlyContinue'
-Invoke-WebRequest https://github.com/gbl08ma/webpc-net/releases/download/<version>/webpc-net-<version>-windows-amd64.exe -OutFile "$d\webpc-net.exe"
-if ((Get-FileHash "$d\webpc-net.exe").Hash -ne '<its sha256>') { Remove-Item "$d\webpc-net.exe"; throw 'not the published hash' }
-& "$d\webpc-net.exe"
+$d = "$env:LOCALAPPDATA\Programs\waarm64-net"; New-Item -ItemType Directory -Force $d | Out-Null; $ProgressPreference = 'SilentlyContinue'
+Invoke-WebRequest https://github.com/gbl08ma/waarm64-net/releases/download/<version>/waarm64-net-<version>-windows-amd64.exe -OutFile "$d\waarm64-net.exe"
+if ((Get-FileHash "$d\waarm64-net.exe").Hash -ne '<its sha256>') { Remove-Item "$d\waarm64-net.exe"; throw 'not the published hash' }
+& "$d\waarm64-net.exe"
 ```
 
 The binaries aren't signed (Apple's or Microsoft's signatures would change the bytes the hashes and the rebuild check
 are about). macOS doesn't quarantine what `curl` downloads, so Gatekeeper doesn't stop it; Windows' SmartScreen may
 warn the first time. **From source**, with Go 1.27 or later (`go.mod` fetches the pinned toolchain): a checkout
-(below), or, once IPv6 lands upstream, `go install github.com/gbl08ma/webpc-net@<version>` (it refuses a module whose
+(below), or, once IPv6 lands upstream, `go install github.com/gbl08ma/waarm64-net@<version>` (it refuses a module whose
 `go.mod` has a `replace`, which IPv6 needs for now: "IPv6" below).
 
 ## Running it
 
 ```sh
-webpc-net                                  # prints the link to open
-webpc-net --origin http://localhost:8080   # also accept webpc's dev server (npm run serve)
+waarm64-net                                  # prints the link to open
+waarm64-net --origin http://localhost:8080   # also accept waarm64's dev server (npm run serve)
 ```
 
 From a checkout of this repository, `go run .` instead. It prints a link like
@@ -84,7 +84,7 @@ across restarts (the token is kept), so a page paired once reconnects whenever t
 | Flag | |
 |---|---|
 | `--listen 127.0.0.1:<port>` | where to listen (default `127.0.0.1:8740`; a loopback address only: `[::1]:<port>` too) |
-| `--origin <origin>` | a page origin to accept besides `https://vm.tny.im`, exactly (repeatable): a copy of webpc you serve yourself, or its dev server (the helper prints a pairing link for each) |
+| `--origin <origin>` | a page origin to accept besides `https://vm.tny.im`, exactly (repeatable): a copy of waarm64 you serve yourself, or its dev server (the helper prints a pairing link for each) |
 | `--new-token` | a new token: pages paired before must pair again |
 | `--host-loopback` | the guest reaches this computer's own `127.0.0.1` at `192.168.127.254` (off: only the internet and the LAN) |
 | `--no-ipv6` | IPv4 only |
@@ -93,8 +93,8 @@ across restarts (the token is kept), so a page paired once reconnects whenever t
 
 It logs a line when it starts, for each page that connects or disconnects (its origin, how long) and for each refused
 one (why), and when this computer's IPv6 reach changes; nothing about the traffic. The token is in your config
-directory (`~/.config/webpc-net/token` on Linux, `~/Library/Application Support/webpc-net/token` on macOS,
-`%AppData%\webpc-net\token` on Windows), and beside it `leases-<address>`, the address each guest's MAC was given (below).
+directory (`~/.config/waarm64-net/token` on Linux, `~/Library/Application Support/waarm64-net/token` on macOS,
+`%AppData%\waarm64-net\token` on Windows), and beside it `leases-<address>`, the address each guest's MAC was given (below).
 
 ## The network
 
@@ -121,7 +121,7 @@ route **only while this computer reaches the internet over IPv6**: the helper as
 resolvers over IPv6 at the start and every minute (any answer counts; three lost in a row and it's out), and while it
 is out the router advertisements it sends carry no default route. The guest then keeps its address on the link, and
 its IPv6 to the internet fails at once ("network unreachable"), so programs fall back to IPv4 without waiting. When
-the answer changes, the guest hears a new router advertisement at once. (webpc's page does the same for a tunnel's far
+the answer changes, the guest hears a new router advertisement at once. (waarm64's page does the same for a tunnel's far
 end: its `docs/network-adapters.md` §4 "IPv6 out".)
 
 Upstream's switch answers router solicitations only and its advertisements have a 1000 s lifetime, so the helper
@@ -149,14 +149,14 @@ x86_64 Linux and one on aarch64 Linux (2026-11-01 and 2026-11-02) gave the same 
 
 ## Protocol
 
-`ws://127.0.0.1:<port>/<token>`, subprotocol `webpc-net.v1`. Each binary message holds one or more whole Ethernet
+`ws://127.0.0.1:<port>/<token>`, subprotocol `waarm64-net.v1`. Each binary message holds one or more whole Ethernet
 frames, each after its 4-byte big-endian length (QEMU's stream framing), both ways. Refusals complete the handshake
 and close with 4001 (another version), 4003 (origin not accepted) or 4004 (wrong token), so the page can say why.
 
 ## Developing
 
 `go test -race ./...` runs a guest on gVisor's netstack against the helper over a real WebSocket (DHCP, router
-advertisements following the IPv6 reach, TCP both ways to this computer, the refusals). webpc's
-`tests/net-local.test.ts` boots Debian on the page through it (`scripts/ci-net.sh`), built at the commit webpc pins
-(its `tests/webpc-net.ts`). Each push to `main` runs `go vet` and the tests (`.github/workflows/ci.yml`). See
+advertisements following the IPv6 reach, TCP both ways to this computer, the refusals). waarm64's
+`tests/net-local.test.ts` boots Debian on the page through it (`scripts/ci-net.sh`), built at the commit waarm64 pins
+(its `tests/waarm64-net.ts`). Each push to `main` runs `go vet` and the tests (`.github/workflows/ci.yml`). See
 [CLAUDE.md](CLAUDE.md).

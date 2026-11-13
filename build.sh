@@ -8,16 +8,16 @@
 #   ./build.sh --install <SHA256SUMS> <version>   (prints INSTALL.md for published sums: no build)
 set -eu
 # The install lines, one block per target with its hash (README "Install" takes them at a release; the page has its own
-# copy, webpc's web/local-release.ts, which tests/local-release.test.ts checks against these). Plain steps, no `curl | sh`:
+# copy, waarm64's web/local-release.ts, which tests/local-release.test.ts checks against these). Plain steps, no `curl | sh`:
 # download, check the hash, mark it executable, run it.
 install() { # <version> <SHA256SUMS>
   version=$1 sums=$2
-  base=${WEBPC_NET_DOWNLOAD:-https://github.com/gbl08ma/webpc-net/releases/download/$version}
+  base=${WAARM64_NET_DOWNLOAD:-https://github.com/gbl08ma/waarm64-net/releases/download/$version}
   sum() { sed -n "s/^\([0-9a-f]*\)  $1\$/\1/p" "$sums"; }
-  echo "# Installing webpc-net $version"
+  echo "# Installing waarm64-net $version"
   for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
     os=${target%/*} arch=${target#*/}
-    exe=webpc-net-$version-$os-$arch
+    exe=waarm64-net-$version-$os-$arch
     check='sha256sum -c'
     [ "$os" = darwin ] && check='shasum -a 256 -c'
     cat <<EOF
@@ -26,24 +26,24 @@ install() { # <version> <SHA256SUMS>
 
 \`\`\`sh
 mkdir -p ~/.local/bin
-curl -fLo ~/.local/bin/webpc-net $base/$exe
-echo "$(sum "$exe")  \$HOME/.local/bin/webpc-net" | $check || rm ~/.local/bin/webpc-net
-chmod +x ~/.local/bin/webpc-net
-~/.local/bin/webpc-net
+curl -fLo ~/.local/bin/waarm64-net $base/$exe
+echo "$(sum "$exe")  \$HOME/.local/bin/waarm64-net" | $check || rm ~/.local/bin/waarm64-net
+chmod +x ~/.local/bin/waarm64-net
+~/.local/bin/waarm64-net
 \`\`\`
 EOF
   done
   for arch in amd64 arm64; do
-    exe=webpc-net-$version-windows-$arch.exe
+    exe=waarm64-net-$version-windows-$arch.exe
     cat <<EOF
 
 ## windows $arch (PowerShell)
 
 \`\`\`powershell
-\$d = "\$env:LOCALAPPDATA\\Programs\\webpc-net"; New-Item -ItemType Directory -Force \$d | Out-Null; \$ProgressPreference = 'SilentlyContinue'
-Invoke-WebRequest $base/$exe -OutFile "\$d\\webpc-net.exe"
-if ((Get-FileHash "\$d\\webpc-net.exe").Hash -ne '$(sum "$exe")') { Remove-Item "\$d\\webpc-net.exe"; throw 'not the published hash' }
-& "\$d\\webpc-net.exe"
+\$d = "\$env:LOCALAPPDATA\\Programs\\waarm64-net"; New-Item -ItemType Directory -Force \$d | Out-Null; \$ProgressPreference = 'SilentlyContinue'
+Invoke-WebRequest $base/$exe -OutFile "\$d\\waarm64-net.exe"
+if ((Get-FileHash "\$d\\waarm64-net.exe").Hash -ne '$(sum "$exe")') { Remove-Item "\$d\\waarm64-net.exe"; throw 'not the published hash' }
+& "\$d\\waarm64-net.exe"
 \`\`\`
 EOF
   done
@@ -81,10 +81,10 @@ rm -rf "$out"
 mkdir -p "$out"
 for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
   os=${target%/*} arch=${target#*/}
-  exe=webpc-net-$version-$os-$arch
+  exe=waarm64-net-$version-$os-$arch
   [ "$os" = windows ] && exe=$exe.exe
   GOOS=$os GOARCH=$arch go build -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.version=$version" -o "$out/$exe" .
 done
 ./licenses.sh "$version" > "$out/LICENSES.txt"
-(cd "$out" && LC_ALL=C sha256sum LICENSES.txt webpc-net-* > SHA256SUMS && cat SHA256SUMS)
+(cd "$out" && LC_ALL=C sha256sum LICENSES.txt waarm64-net-* > SHA256SUMS && cat SHA256SUMS)
 install "$version" "$out/SHA256SUMS" > "$out/INSTALL.md"

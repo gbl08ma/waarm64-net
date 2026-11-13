@@ -23,7 +23,7 @@ func TestCheckMTU(t *testing.T) {
 
 // A port another program has: the message says what to do, not just the socket's error.
 func TestPortTaken(t *testing.T) {
-	t.Setenv("WEBPC_NET_TOKEN", newToken())
+	t.Setenv("WAARM64_NET_TOKEN", newToken())
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestPortTaken(t *testing.T) {
 }
 
 func TestListenLoopbackOnly(t *testing.T) {
-	t.Setenv("WEBPC_NET_TOKEN", newToken())
+	t.Setenv("WAARM64_NET_TOKEN", newToken())
 	for _, l := range []string{"0.0.0.0:8740", "192.168.1.2:8740", "localhost:8740", ":8740"} {
 		if err := run(l, []string{DefaultOrigin}, false, Options{MTU: 1500}); err == nil || !strings.Contains(err.Error(), "loopback") {
 			t.Errorf("run(%q): %v, want a refusal", l, err)

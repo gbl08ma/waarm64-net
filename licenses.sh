@@ -25,12 +25,12 @@ licenseFiles() { # the license, notice and patent files at the top of a module
 }
 
 cat <<EOF
-webpc-net $version: the license of webpc-net (MIT) and of everything its binaries link, in full.
+waarm64-net $version: the license of waarm64-net (MIT) and of everything its binaries link, in full.
 The helper's binaries for Linux, macOS and Windows link Go's standard library and runtime and the modules below
 (each in at least one of them); THIRD_PARTY.md in the source says what each is for.
 EOF
 # shellcheck disable=SC2046 # the files' names have no spaces
-section "webpc-net (github.com/gbl08ma/webpc-net)" . LICENSE
+section "waarm64-net (github.com/gbl08ma/waarm64-net)" . LICENSE
 section "Go's standard library and runtime ($(go env GOVERSION))" "$goroot" $(licenseFiles "$goroot")
 for os in linux darwin windows; do for arch in amd64 arm64; do
   GOOS=$os GOARCH=$arch go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}}{{with .Replace}} {{.Path}} {{.Version}}{{end}}{{end}}{{end}}' .

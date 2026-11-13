@@ -1,6 +1,6 @@
 # The release (README "Reproducible builds"): build.sh on an x86_64 and an arm64 Linux runner, and, on a v* tag, a
 # release published only when the two builds are byte for byte the same, with INSTALL.md as its notes. Run by hand
-# (workflow_dispatch) it builds and compares without releasing. Separate from webpc's deploy: webpc's page offers a
+# (workflow_dispatch) it builds and compares without releasing. Separate from waarm64's deploy: waarm64's page offers a
 # release once its web/local-release.ts takes the release's SHA256SUMS.
 name: release
 on:
@@ -55,4 +55,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "webpc-net $TAG" --notes-file INSTALL.md webpc-net-* LICENSES.txt SHA256SUMS
+        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "waarm64-net $TAG" --notes-file INSTALL.md waarm64-net-* LICENSES.txt SHA256SUMS
