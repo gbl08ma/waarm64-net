@@ -1,6 +1,6 @@
 # waarm64-net
 
-A small program you run on your own computer to give a [waarm64](https://vm.tny.im) virtual machine a fast network:
+A small program you run on your own computer to give a [waarm64](https://waarm64.com) virtual machine a fast network:
 the page in your browser connects to it over a WebSocket on `127.0.0.1`, and the guest's traffic goes out through
 this computer's own sockets, at loopback's latency and your own uplink's speed. Without it, a browser can reach the
 internet only through a relay (tailcat, Tailscale's DERP), because pages have no UDP.
@@ -33,7 +33,7 @@ port-forwarding endpoints aren't served.
 
 **Who can use it:** only a page that has your link (its token, 256 random bits, kept in your config directory so
 a paired page keeps working after a restart; `--new-token` replaces it) *and* comes from an allowed origin
-(`https://vm.tny.im`, plus each `--origin`). It listens on `127.0.0.1` only. Without both checks, any site you
+(`https://waarm64.com`, plus each `--origin`). It listens on `127.0.0.1` only. Without both checks, any site you
 visit could use it as a way into your LAN.
 
 ## Install
@@ -76,7 +76,7 @@ waarm64-net --origin http://localhost:8080   # also accept waarm64's dev server 
 ```
 
 From a checkout of this repository, `go run .` instead. It prints a link like
-`https://vm.tny.im/#net=ws://127.0.0.1:8740/<token>`: open it, and the page offers to add the helper as a connection
+`https://waarm64.com/#net=ws://127.0.0.1:8740/<token>`: open it, and the page offers to add the helper as a connection
 (its Network wizard, "This computer") for a machine's network adapter. Chromium asks once whether the page may reach
 devices on your local network: allow it (if you refused, the page says where to change it). The link stays the same
 across restarts (the token is kept), so a page paired once reconnects whenever the helper runs. Stop it with Ctrl-C.
@@ -84,7 +84,7 @@ across restarts (the token is kept), so a page paired once reconnects whenever t
 | Flag | |
 |---|---|
 | `--listen 127.0.0.1:<port>` | where to listen (default `127.0.0.1:8740`; a loopback address only: `[::1]:<port>` too) |
-| `--origin <origin>` | a page origin to accept besides `https://vm.tny.im`, exactly (repeatable): a copy of waarm64 you serve yourself, or its dev server (the helper prints a pairing link for each) |
+| `--origin <origin>` | a page origin to accept besides `https://waarm64.com`, exactly (repeatable): a copy of waarm64 you serve yourself, or its dev server (the helper prints a pairing link for each) |
 | `--new-token` | a new token: pages paired before must pair again |
 | `--host-loopback` | the guest reaches this computer's own `127.0.0.1` at `192.168.127.254` (off: only the internet and the LAN) |
 | `--no-ipv6` | IPv4 only |

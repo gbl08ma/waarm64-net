@@ -1,4 +1,4 @@
-// waarm64-net puts a browser VM's network on this computer's sockets. The page (waarm64, https://vm.tny.im)
+// waarm64-net puts a browser VM's network on this computer's sockets. The page (waarm64, https://waarm64.com)
 // connects over a WebSocket on loopback and sends the guest's Ethernet frames; gvisor-tap-vsock's userspace network
 // (Podman machine's, Lima's) gives the guest DHCP, DNS and a gateway whose TCP, UDP and ICMP go out through this
 // program's own sockets. README.md says what is ours and what is imported.
@@ -24,7 +24,7 @@ import (
 const DefaultPort = 8740
 
 // DefaultOrigin is the page's own origin, the one a WebSocket is accepted from without --origin.
-const DefaultOrigin = "https://vm.tny.im"
+const DefaultOrigin = "https://waarm64.com"
 
 type origins []string
 

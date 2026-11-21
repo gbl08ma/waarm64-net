@@ -117,7 +117,7 @@ func TestRefusals(t *testing.T) {
 	}{
 		{"origin", "/tok", "https://evil.test", []string{Subprotocol}, CloseOrigin},
 		{"no origin", "/tok", "", []string{Subprotocol}, CloseOrigin},
-		{"origin's scheme", "/tok", "http://vm.tny.im", []string{Subprotocol}, CloseOrigin},
+		{"origin's scheme", "/tok", "http://waarm64.com", []string{Subprotocol}, CloseOrigin},
 		// Past a close frame's 123 bytes of reason, the code would be lost (a 1006 to a browser).
 		{"long origin", "/tok", "https://" + strings.Repeat("a", 100) + ".test", []string{Subprotocol}, CloseOrigin},
 		{"token", "/tak", testOrigin, []string{Subprotocol}, CloseToken},
@@ -143,16 +143,16 @@ func TestRefusals(t *testing.T) {
 
 func TestNormOrigin(t *testing.T) {
 	for in, want := range map[string]string{
-		"https://vm.tny.im":      "https://vm.tny.im",
-		"https://VM.tny.im:443/": "https://vm.tny.im",
-		"http://localhost:8080":  "http://localhost:8080",
-		"http://[::1]:80":        "http://[::1]",
+		"https://waarm64.com":      "https://waarm64.com",
+		"https://WAARM64.com:443/": "https://waarm64.com",
+		"http://localhost:8080":    "http://localhost:8080",
+		"http://[::1]:80":          "http://[::1]",
 	} {
 		if got, err := normOrigin(in); err != nil || got != want {
 			t.Errorf("normOrigin(%q) = %q, %v; want %q", in, got, err, want)
 		}
 	}
-	for _, bad := range []string{"vm.tny.im", "ws://vm.tny.im", "https://vm.tny.im/x", "https://", "file:///"} {
+	for _, bad := range []string{"waarm64.com", "ws://waarm64.com", "https://waarm64.com/x", "https://", "file:///"} {
 		if _, err := normOrigin(bad); err == nil {
 			t.Errorf("normOrigin(%q) accepted", bad)
 		}

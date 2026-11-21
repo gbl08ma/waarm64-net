@@ -220,7 +220,7 @@ func (h *Helper) originAllowed(origin string) bool {
 func normOrigin(s string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(s))
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.User != nil {
-		return "", fmt.Errorf("%q isn't an origin (like https://vm.tny.im or http://localhost:8080)", s)
+		return "", fmt.Errorf("%q isn't an origin (like https://waarm64.com or http://localhost:8080)", s)
 	}
 	host := strings.ToLower(u.Hostname())
 	port := u.Port()
