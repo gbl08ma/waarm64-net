@@ -1,5 +1,5 @@
-# go vet and the tests (README "Developing"), on one Linux runner. The repository is private for now and its runner
-# minutes are billed: only changes that can break them run it (CLAUDE.md "GitHub Actions").
+# go vet and the tests (README "Developing"), on one Linux runner, for the changes that can break them (CLAUDE.md
+# "GitHub Actions").
 name: ci
 on:
   push:

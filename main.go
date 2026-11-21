@@ -138,7 +138,7 @@ func fileSafe(r rune) rune {
 const wsaeaddrinuse = 10048
 
 // MaxMTU is the largest MTU a link can have: the largest the page takes and was measured with (waarm64's
-// docs/plans/networking-local.md §3 "The MTU").
+// docs/networking/local-helper.md "The helper, briefly").
 const MaxMTU = 65520
 
 // checkMTU refuses an MTU the guest or the page couldn't use: IPv6 needs 1280, IPv4's DHCP 576.

@@ -5,8 +5,8 @@ the page in your browser connects to it over a WebSocket on `127.0.0.1`, and the
 this computer's own sockets, at loopback's latency and your own uplink's speed. Without it, a browser can reach the
 internet only through a relay (tailcat, Tailscale's DERP), because pages have no UDP.
 
-> **Status: early** (v0.1.0; waarm64's `docs/plans/networking-local.md` is the plan). Every name (the program's, the
-> subprotocol, the port) is provisional.
+> **Status: usable, not yet stable** (v0.4.0). Until 1.0, a release may change the protocol, the flags, the port or
+> the files it keeps without staying compatible with the one before; waarm64's page offers the release it works with.
 
 ## What you're trusting
 
@@ -34,7 +34,8 @@ port-forwarding endpoints aren't served.
 **Who can use it:** only a page that has your link (its token, 256 random bits, kept in your config directory so
 a paired page keeps working after a restart; `--new-token` replaces it) *and* comes from an allowed origin
 (`https://waarm64.com`, plus each `--origin`). It listens on `127.0.0.1` only. Without both checks, any site you
-visit could use it as a way into your LAN.
+visit could use it as a way into your LAN. A way around either is a vulnerability: [SECURITY.md](SECURITY.md) says how to
+report it.
 
 ## Install
 
@@ -122,7 +123,7 @@ resolvers over IPv6 at the start and every minute (any answer counts; three lost
 is out the router advertisements it sends carry no default route. The guest then keeps its address on the link, and
 its IPv6 to the internet fails at once ("network unreachable"), so programs fall back to IPv4 without waiting. When
 the answer changes, the guest hears a new router advertisement at once. (waarm64's page does the same for a tunnel's far
-end: its `docs/network-adapters.md` §4 "IPv6 out".)
+end: its `docs/networking/adapters.md` §4 "IPv6 out".)
 
 Upstream's switch answers router solicitations only and its advertisements have a 1000 s lifetime, so the helper
 solicits one on each guest's behalf every 5 minutes, and whenever a guest first appears on a link. Its gateway's neighbor
@@ -132,8 +133,8 @@ traffic pauses, so the helper sets the flag on them.
 ## Reproducible builds
 
 ```sh
-./build.sh v0.1.0                               # dist/: the six binaries, LICENSES.txt, SHA256SUMS, INSTALL.md
-./build.sh --check SHA256SUMS v0.1.0            # rebuilds v0.1.0 from this checkout and compares with a release's sums
+./build.sh v0.4.0                               # dist/: the six binaries, LICENSES.txt, SHA256SUMS, INSTALL.md
+./build.sh --check SHA256SUMS v0.4.0            # rebuilds v0.4.0 from this checkout and compares with a release's sums
 ```
 
 `CGO_ENABLED=0`, `-trimpath`, no build ID, no VCS stamp, each architecture's baseline (`GOAMD64=v1`, `GOARM64=v8.0`),

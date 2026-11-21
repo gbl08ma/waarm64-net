@@ -5,8 +5,8 @@ loopback and whose gvisor-tap-vsock network puts the guest on the host's sockets
 `github.com/gbl08ma/waarm64-net`.
 
 **Where it stands:** its own repository since 2026-11-02 (it began in waarm64's `net/waarm64-net/`; `git log` keeps that
-history). The plan and its decisions are waarm64's `docs/plans/networking-local.md` (§1 binds), and the track's state is
-waarm64's `NET-HANDOVER.md` while the track is open (waarm64 is `github.com/gbl08ma/waarm64`, usually checked out beside
+history). How waarm64 uses it is waarm64's `docs/networking/local-helper.md`, the decisions that bind are in its
+`docs/decisions.md`, and the track's state is waarm64's `NET-HANDOVER.md` while the track is open (waarm64 is `github.com/gbl08ma/waarm64`, usually checked out beside
 this one as `../waarm64`). It imports nothing from waarm64; waarm64's tests build it at a commit they pin (waarm64's
 `tests/waarm64-net.ts`, `WAARM64_NET_SRC=../waarm64-net` for a local checkout), and its page's install lines are a copy of
 `build.sh`'s (waarm64's `web/local-release.ts`, which waarm64's `tests/local-release.test.ts` checks against `build.sh
@@ -33,8 +33,8 @@ this one as `../waarm64`). It imports nothing from waarm64; waarm64's tests buil
 - **Security:** listen on loopback only; a WebSocket only with the token (constant-time compare) and from an allowed
   origin, exact match; nothing about the traffic in the logs; no guest-reachable API.
 - **IPv6 out:** the guest's IPv6 default route only while the host reaches the internet over IPv6 (README "IPv6"); keep
-  it in step with waarm64's page (`web/reach6.ts`, docs/network-adapters.md §4 "IPv6 out").
-- **Docs:** the README, THIRD_PARTY.md and this file say what exists now; history only where it's worth not
+  it in step with waarm64's page (`web/reach6.ts`, docs/networking/adapters.md §4 "IPv6 out").
+- **Docs:** the README, THIRD_PARTY.md, SECURITY.md and this file say what exists now; history only where it's worth not
   re-discovering. Change them with the code.
 - **Bound every run** (`timeout N`), and cap the memory of heavy ones (`systemd-run --user --scope -q -p MemoryMax=4G
   -p MemorySwapMax=0 -- timeout N <cmd>` in waarm64's dev VM).
@@ -55,16 +55,15 @@ off; the probe's "reached" side runs over IPv4 in `helper_test.go`.
 
 ## GitHub Actions
 
-The repository is private for now, so every runner minute is billed against a monthly allowance: keep the workflows
-small. `ci.yml`: `go vet` and `go test -race` on one Linux runner, on pushes to `main` and pull requests that touch Go
+`ci.yml`: `go vet` and `go test -race` on one Linux runner, on pushes to `main` and pull requests that touch Go
 code, `go.mod`/`go.sum`, the scripts or the workflows. `release.yml`: on a `v*` tag (or by hand, building without
 releasing), `build.sh` on an x86_64 and an arm64 Linux runner; the release is published, with `INSTALL.md` as its
-notes, only when both SHA256SUMS are identical. No macOS or Windows runners (10× and 2× the minutes): the builds are
+notes, only when both SHA256SUMS are identical. No macOS or Windows runners: the builds are
 cross-compiled and reproducible anyway. Releasing is separate from waarm64's deploy: a release changes nothing on
 waarm64's page until waarm64's `web/local-release.ts` takes its SHA256SUMS.
 
-A release: only after an out-of-context review of what it adds (the user's, 2026-11-03: a release costs runner minutes,
-and one cut too early means another), and after `ci.yml` passed on its commit; then tag `vX.Y.Z` on `main` (the Go
+A release: only after an out-of-context review of what it adds (the user's, 2026-11-03: one cut too early means
+another), and after `ci.yml` passed on its commit; then tag `vX.Y.Z` on `main` (the Go
 module's version too) and push the tag. Then waarm64's `web/local-release.ts`
 takes the release's version and sums.
 

@@ -11,7 +11,7 @@ import (
 )
 
 // Whether this computer reaches the internet over IPv6, checked as the page checks a tunnel's far end (waarm64's
-// web/reach6.ts, docs/network-adapters.md §4 "IPv6 out"): a DNS query for the root's NS records to three operators'
+// web/reach6.ts, docs/networking/adapters.md §4 "IPv6 out"): a DNS query for the root's NS records to three operators'
 // resolvers at once, any answer counting; at the start and every minute; three lost in a row (3 s each) make IPv6
 // out, one answer brings it back, and until the first answer it is out. While it's out the guest's router
 // advertisements carry no default route (rewriteRA).
