@@ -5,9 +5,9 @@ loopback and whose gvisor-tap-vsock network puts the guest on the host's sockets
 `github.com/gbl08ma/waarm64-net`.
 
 **Where it stands:** its own repository since 2026-11-02 (it began in waarm64's `net/waarm64-net/`; `git log` keeps that
-history). How waarm64 uses it is waarm64's `docs/networking/local-helper.md`, the decisions that bind are in its
-`docs/decisions.md`, and the track's state is waarm64's `NET-HANDOVER.md` while the track is open (waarm64 is `github.com/gbl08ma/waarm64`, usually checked out beside
-this one as `../waarm64`). It imports nothing from waarm64; waarm64's tests build it at a commit they pin (waarm64's
+history). How waarm64 uses it, and the decisions that bind it, are waarm64's `docs/networking/local-helper.md`
+("Decisions"); its loose ends are waarm64's `docs/backlog.md` "The local helper's loose ends" (waarm64 is
+`github.com/gbl08ma/waarm64`, usually checked out beside this one as `../waarm64`). It imports nothing from waarm64; waarm64's tests build it at a commit they pin (waarm64's
 `tests/waarm64-net.ts`, `WAARM64_NET_SRC=../waarm64-net` for a local checkout), and its page's install lines are a copy of
 `build.sh`'s (waarm64's `web/local-release.ts`, which waarm64's `tests/local-release.test.ts` checks against `build.sh
 --install`).
@@ -66,5 +66,3 @@ A release: only after an out-of-context review of what it adds (the user's, 2026
 another), and after `ci.yml` passed on its commit; then tag `vX.Y.Z` on `main` (the Go
 module's version too) and push the tag. Then waarm64's `web/local-release.ts`
 takes the release's version and sums.
-
-Status and the next steps: waarm64's `NET-HANDOVER.md` while the track is open.
